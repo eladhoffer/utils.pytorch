@@ -128,7 +128,7 @@ class OptimRegime(object):
         """Clears the gradients of all optimized :class:`Variable` s."""
         self.optimizer.zero_grad()
 
-    def step(self, closure):
+    def step(self, closure=None):
         """Performs a single optimization step (parameter update).
 
         Arguments:

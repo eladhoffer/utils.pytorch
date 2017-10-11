@@ -24,8 +24,8 @@ class OptimRegime(object):
          }]"
     """
 
-    def __init__(self, optimizer, regime):
-        self.optimizer = optimizer
+    def __init__(self, params, regime):
+        self.optimizer = torch.optim.Optimizer(params)
         self.regime = regime
         self.current_regime_phase = None
         self.setting = {}

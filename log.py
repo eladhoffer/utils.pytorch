@@ -7,7 +7,6 @@ from bokeh.io import output_file, save, show
 from bokeh.plotting import figure
 from bokeh.layouts import column
 from bokeh.charts import Line, defaults
-import holoviews as hv
 from copy import deepcopy
 
 defaults.width = 800

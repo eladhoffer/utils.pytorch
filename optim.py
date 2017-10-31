@@ -1,6 +1,13 @@
 import torch
 import logging.config
 from copy import deepcopy
+from six import string_types
+
+
+def eval_func(f, x):
+    if isinstance(f, string_types):
+        f = eval(f)
+    return f(x)
 
 
 class OptimRegime(object):
@@ -64,10 +71,10 @@ class OptimRegime(object):
                 setting['lr'] *= decay_rate ** (train_steps / decay_steps)
                 update_optimizer = True
         elif 'step_lambda' in setting:
-            setting = eval(setting['step_lambda'])(train_steps)
+            setting.update(eval_func(setting['step_lambda'], train_steps))
             update_optimizer = True
         elif 'epoch_lambda' in setting:
-            setting = eval(setting['epoch_lambda'])(epoch)
+            setting.update(eval_func(setting['epoch_lambda'], epoch))
             update_optimizer = True
 
         if update_optimizer:

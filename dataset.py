@@ -1,4 +1,5 @@
 import torch
+from torch.utils.data import Dataset
 from numpy.random import choice
 
 class RandomSamplerReplacment(torch.utils.data.sampler.Sampler):

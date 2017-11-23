@@ -61,7 +61,8 @@ def setup_logging(log_file='log.txt', resume=False):
         file_mode = 'w'
 
     root_logger = logging.getLogger()
-    root_logger.removeHandler(root_logger.handlers[0])
+    if root_logger.handlers:
+        root_logger.removeHandler(root_logger.handlers[0])
     logging.basicConfig(level=logging.DEBUG,
                         format="%(asctime)s - %(levelname)s - %(message)s",
                         datefmt="%Y-%m-%d %H:%M:%S",

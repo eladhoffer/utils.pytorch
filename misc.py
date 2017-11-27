@@ -1,3 +1,5 @@
+import random
+import numpy as np
 from torch.autograd import Variable
 
 
@@ -23,3 +25,16 @@ def onehot(indexes, N=None, ignore_index=None):
         output = Variable(output, requires_grad=False)
 
     return output
+
+
+def set_global_seeds(i):
+    try:
+        import torch
+    except ImportError:
+        pass
+    else:
+        torch.manual_seed(i)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(i)
+    np.random.seed(i)
+    random.seed(i)

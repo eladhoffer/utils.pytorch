@@ -17,23 +17,30 @@ from bokeh.models import Div
 def setup_logging_and_results(args):
     """
     Calls setup_loggining, exports args and creates a ResultsLog class.
-    Assumes args contains save_path, save_name
     Can resume training/logging if args.resume is set
     """
-    if args.save_name is '':
-        args.save_name = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    save_path = os.path.join(args.results_dir, args.save_name)
+    def set_args_default(field_name, value):
+        if hasattr(args, field_name):
+            return eval('args.' + field_name)
+        else:
+            return value
+
+    # Set default args in case they don't exist in args
+    resume = set_args_default('resume', False)
+    data_format = set_args_default('data_format', 'csv')
+    save_name = set_args_default('save_name', '')
+    results_dir = set_args_default('results_dir', './results')
+
+    if save_name is '':
+        save_name = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    save_path = os.path.join(results_dir, save_name)
     if os.path.exists(save_path):
         shutil.rmtree(save_path)
     os.makedirs(save_path, exist_ok=True)
     log_file = os.path.join(save_path, 'log.txt')
 
-    if hasattr(args, 'resume'):
-        resume = args.resume
-    else:
-        resume = False
     setup_logging(log_file, resume)
-    results = ResultsLog(path=save_path, plot_title=args.save_name, resume=False)
+    results = ResultsLog(path=save_path, plot_title=save_name, resume=False, data_format=data_format)
     export_args(args, save_path)
     return results, save_path
 
@@ -77,22 +84,33 @@ def setup_logging(log_file='log.txt', resume=False):
 
 class ResultsLog(object):
 
-    def __init__(self, path='', plot_title='', resume=False):
+    supported_data_formats = ['csv', 'json']
+
+    def __init__(self, path='', plot_title='', resume=False, data_format='csv'):
         """
         Parameters
         ----------
         path: string
-            path to directory to save json files
+            path to directory to save data files
         plot_path: string
             path to directory to save plot files
         plot_title: string
             title of HTML file
         resume: bool
             resume previous logging
+        data_format: str('csv'|'json')
+            which file format to use to save the data
         """
+        if data_format not in ResultsLog.supported_data_formats:
+            raise ValueError('data_format must of the following: ' +
+                             '|'.join(['{}'.format(k) for k in ResultsLog.supported_data_formats]))
+
         os.makedirs(path, exist_ok=True)
         full_path = os.path.join(path, 'results')
-        self.date_path = '{}.json'.format(full_path)
+        if data_format == 'json':
+            self.date_path = '{}.json'.format(full_path)
+        else:
+            self.date_path = '{}.csv'.format(full_path)
         self.plot_path = '{}.html'.format(full_path)
         self.results = None
         self.clear()
@@ -109,6 +127,7 @@ class ResultsLog(object):
             self.results = pd.DataFrame()
 
         self.plot_title = plot_title
+        self.data_format = data_format
 
     def clear(self):
         self.figures = []
@@ -146,18 +165,24 @@ class ResultsLog(object):
             save(plot)
             self.clear()
 
-        self.results.to_json(self.date_path, orient='records', lines=True)
+        if self.data_format == 'json':
+            self.results.to_json(self.date_path, orient='records', lines=True)
+        else:
+            self.results.to_csv(self.date_path, index=False, index_label=False)
 
     def load(self, path=None):
-        """load a json file
+        """load the data file
         Parameters
         ----------
         path:
-            path to load the json file from
+            path to load the json|csv file from
         """
         path = path or self.path
         if os.path.isfile(path):
-            self.results = pd.read_json(path)
+            if self.data_format == 'json':
+                self.results.read_json(path)
+            else:
+                self.results.read_csv(path)
         else:
             raise ValueError('{} isn''t a file'.format(path))
 

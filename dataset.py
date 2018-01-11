@@ -52,3 +52,19 @@ class ByClassDataset(Dataset):
             items = torch.stack(items)
 
         return (items, labels)
+
+
+class IdxDataset(Dataset):
+    """docstring for IdxDataset."""
+
+    def __init__(self, dset):
+        super(IdxDataset, self).__init__()
+        self.dset = dset
+        self.idxs = range(len(self.dset))
+
+    def __getitem__(self, idx):
+        data, labels = self.dset[self.idxs[idx]]
+        return (idx, data, labels)
+
+    def __len__(self):
+        return len(self.idxs)

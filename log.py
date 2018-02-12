@@ -12,49 +12,21 @@ from bokeh.plotting import figure
 from bokeh.layouts import column
 from bokeh.models import Div
 
-
-def setup_logging_and_results(args):
-    """
-    Calls setup_loggining, exports args and creates a ResultsLog class.
-    Can resume training/logging if args.resume is set
-    """
-    def set_args_default(field_name, value):
-        if hasattr(args, field_name):
-            return eval('args.' + field_name)
-        else:
-            return value
-
-    # Set default args in case they don't exist in args
-    resume = set_args_default('resume', False)
-    data_format = set_args_default('data_format', 'csv')
-    save_name = set_args_default('save_name', '')
-    results_dir = set_args_default('results_dir', './results')
-
-    if save_name is '':
-        save_name = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    save_path = os.path.join(results_dir, save_name)
-    if os.path.exists(save_path):
-        shutil.rmtree(save_path)
-    os.makedirs(save_path, exist_ok=True)
-    log_file = os.path.join(save_path, 'log.txt')
-
-    setup_logging(log_file, resume)
-    results = ResultsLog(path=save_path, title=save_name,
-                         resume=False, data_format=data_format)
-    export_args(args, save_path)
-    return results, save_path
+try:
+    import hyperdash
+    HYPERDASH_AVAILABLE = True
+except ImportError:
+    HYPERDASH_AVAILABLE = False
 
 
-def export_args(args, save_path):
+def export_args_namespace(args, filename):
     """
     args: argparse.Namespace
         arguments to save
-    save_path: string
-        path to directory to save at
+    filename: string
+        filename to save at
     """
-    os.makedirs(save_path, exist_ok=True)
-    json_file_name = os.path.join(save_path, 'args.json')
-    with open(json_file_name, 'w') as fp:
+    with open(filename, 'w') as fp:
         json.dump(dict(args._get_kwargs()), fp, sort_keys=True, indent=4)
 
 
@@ -86,7 +58,7 @@ class ResultsLog(object):
 
     supported_data_formats = ['csv', 'json']
 
-    def __init__(self, path='', title='', resume=False, data_format='csv'):
+    def __init__(self, path='', title='', params=None, resume=False, data_format='csv'):
         """
         Parameters
         ----------
@@ -96,6 +68,8 @@ class ResultsLog(object):
             path to directory to save plot files
         title: string
             title of HTML file
+        params: Namespace
+            optionally save parameters for results
         resume: bool
             resume previous logging
         data_format: str('csv'|'json')
@@ -109,6 +83,8 @@ class ResultsLog(object):
             self.data_path = '{}.json'.format(path)
         else:
             self.data_path = '{}.csv'.format(path)
+        if params is not None:
+            export_args_namespace(params, '{}.json'.format(path))
         self.plot_path = '{}.html'.format(path)
         self.results = None
         self.clear()
@@ -126,6 +102,13 @@ class ResultsLog(object):
         self.title = title
         self.data_format = data_format
 
+        if HYPERDASH_AVAILABLE:
+            name = self.title if title != '' else path
+            self.hd_experiment = hyperdash.Experiment(name)
+            if params is not None:
+                for k, v in params._get_kwargs():
+                    self.hd_experiment.param(k, v, log=False)
+
     def clear(self):
         self.figures = []
 
@@ -137,6 +120,9 @@ class ResultsLog(object):
         """
         df = pd.DataFrame([kwargs.values()], columns=kwargs.keys())
         self.results = self.results.append(df, ignore_index=True)
+        if hasattr(self, 'hd_experiment'):
+            for k, v in kwargs.items():
+                self.hd_experiment.metric(k, v, log=False)
 
     def smooth(self, column_name, window):
         """Select an entry to smooth over time"""
@@ -220,12 +206,17 @@ class ResultsLog(object):
             f.line(self.results[x], self.results[yi],
                    line_width=line_width,
                    line_color=next(colors), legend=legend[i])
+        f.legend.click_policy = "hide"
         self.figures.append(f)
 
     def image(self, *kargs, **kwargs):
         fig = figure()
         fig.image(*kargs, **kwargs)
         self.figures.append(fig)
+
+    def end(self):
+        if hasattr(self, 'hd_experiment'):
+            self.hd_experiment.end()
 
 
 def save_checkpoint(state, is_best, path='.', filename='checkpoint.pth.tar', save_all=False):
@@ -236,4 +227,3 @@ def save_checkpoint(state, is_best, path='.', filename='checkpoint.pth.tar', sav
     if save_all:
         shutil.copyfile(filename, os.path.join(
             path, 'checkpoint_epoch_%s.pth.tar' % state['epoch']))
-

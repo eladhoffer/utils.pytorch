@@ -32,15 +32,10 @@ def cross_entropy(logits, target, weight=None, size_average=True,
         return F.cross_entropy(logits, target, weight, size_average,
                                ignore_index, reduce)
     else:
-        lsm = F.log_softmax(logits, dim=1)
+        lsm = F.log_softmax(logits, dim=-1)
         if weight is not None:
             target = target * weight.unsqueeze(0)
-        ce = -(lsm * target).sum(1)
-        if reduce:
-            if size_average:
-                ce = ce.mean()
-            else:
-                ce = ce.sum()
+        ce = F.kl_div(lsm, target, size_average=size_average, reduce=reduce)
         return ce
 
 

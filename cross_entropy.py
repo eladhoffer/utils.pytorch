@@ -36,6 +36,9 @@ def cross_entropy(logits, target, weight=None, size_average=True,
         if weight is not None:
             target = target * weight.unsqueeze(0)
         ce = F.kl_div(lsm, target, size_average=size_average, reduce=reduce)
+        # This is true upto the entropy of target, which is usually constant
+        # for label smoothing with parameter eps:
+        # entropy_tgt = -(math.log(1-eps) + eps*math.log(eps / ((num_classes-1) * (1-eps))))
         return ce
 
 

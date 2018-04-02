@@ -20,7 +20,7 @@ def cross_entropy(logits, target, weight=None, size_average=True,
         num_classes = logits.size(-1)
         mask_idx = None
         if _is_long(target):
-            if ignore_index > 0:
+            if ignore_index >= 0:
                 mask_idx = target.eq(ignore_index)
             target = onehot(target, num_classes).type_as(logits)
         if smooth_dist is None:
@@ -41,7 +41,6 @@ def cross_entropy(logits, target, weight=None, size_average=True,
 
     if weight is not None:
         target = target * weight.unsqueeze(0)
-
     if mask_idx is None and weight is None:
         kl = F.kl_div(lsm, target, size_average=size_average, reduce=reduce)
     else:

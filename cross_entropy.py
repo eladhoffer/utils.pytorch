@@ -11,17 +11,16 @@ def _is_long(x):
     return isinstance(x, torch.LongTensor) or isinstance(x, torch.cuda.LongTensor)
 
 
-def cross_entropy(logits, target, weight=None, size_average=True,
-                  ignore_index=-100, reduce=True, smooth_eps=None, smooth_dist=None):
+def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='elementwise_mean', smooth_eps=None, smooth_dist=None):
     """cross entropy loss, with support for target distributions and label smoothing https://arxiv.org/abs/1512.00567"""
     smooth_eps = smooth_eps or 0
     onehot_smoothing = False
+    ignore_mask = None
     if smooth_eps > 0:
         num_classes = logits.size(-1)
-        mask_idx = None
         if _is_long(target):
             if ignore_index >= 0:
-                mask_idx = target.eq(ignore_index)
+                ignore_mask = target.eq(ignore_index)
             target = onehot(target, num_classes).type_as(logits)
         if smooth_dist is None:
             target = (1 - smooth_eps) * target + \
@@ -33,36 +32,38 @@ def cross_entropy(logits, target, weight=None, size_average=True,
 
     # ordinary log-liklihood - use cross_entropy from nn
     if _is_long(target):
-        return F.cross_entropy(logits, target, weight, size_average,
-                               ignore_index, reduce)
+        return F.cross_entropy(logits, target, weight, ignore_index=ignore_index, reduction=reduction)
 
     # cross entropy with real target distribution
     lsm = F.log_softmax(logits, dim=-1)
 
     if weight is not None:
         target = target * weight.unsqueeze(0)
-    if mask_idx is None and weight is None:
-        kl = F.kl_div(lsm, target, size_average=size_average, reduce=reduce)
+    if ignore_mask is None and weight is None:
+        kl = F.kl_div(lsm, target, reduction='sum' if reduction !=
+                      'none' else 'none')
     else:
-        kl = F.kl_div(lsm, target, size_average=size_average, reduce=False)
-        if mask_idx is not None:
-            kl.masked_fill_(mask_idx.unsqueeze(1), 0)
+        kl = F.kl_div(lsm, target, reduction='none')
+        if ignore_mask is not None:
+            kl.masked_fill_(ignore_mask.unsqueeze(-1), 0)
         if weight is not None:
             kl = kl * weight.unsqueeze(0)
-        if reduce:
-            kl = kl.mean() if size_average else kl.sum()
+        if reduction != 'none':
+            kl = kl.sum()
 
     # for label smoothing with parameter eps:
     if onehot_smoothing:
         entropy = -(math.log(1 - smooth_eps) + smooth_eps *
                     math.log(smooth_eps / ((num_classes - 1) * (1 - smooth_eps))))
     else:
+        if ignore_mask is not None:
+            target = target.masked_select(ignore_mask.unsqueeze(-1))
         entropy = -(target * target.log()).sum()
 
-    if size_average:
-        kl *= num_classes
-        entropy /= logits.size(0)
     ce = kl + entropy
+
+    if reduction == 'elementwise_mean':
+        ce /= logits.size(0)
 
     return ce
 
@@ -70,13 +71,11 @@ def cross_entropy(logits, target, weight=None, size_average=True,
 class CrossEntropyLoss(nn.CrossEntropyLoss):
     """CrossEntropyLoss - with ability to recieve distrbution as targets, and optional label smoothing"""
 
-    def __init__(self, weight=None, size_average=True, ignore_index=-100, reduce=True,
-                 smooth_eps=None, smooth_dist=None):
-        super(CrossEntropyLoss, self).__init__(
-            weight, size_average, ignore_index, reduce)
+    def __init__(self, weight=None, ignore_index=-100, reduction='elementwise_mean', smooth_eps=None, smooth_dist=None):
+        super(CrossEntropyLoss, self).__init__(weight=weight,
+                                               ignore_index=ignore_index, reduction=reduction)
         self.smooth_eps = smooth_eps
         self.smooth_dist = smooth_dist
 
     def forward(self, input, target):
-        return cross_entropy(input, target, self.weight, self.size_average,
-                             self.ignore_index, self.reduce, self.smooth_eps, self.smooth_dist)
+        return cross_entropy(input, target, self.weight, self.ignore_index, self.reduction, self.smooth_eps, self.smooth_dist)

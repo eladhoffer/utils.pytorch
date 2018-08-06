@@ -27,8 +27,10 @@ def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='ele
                 smooth_eps / num_classes
             onehot_smoothing = True
         else:
+            if smooth_dist.dim() < target.dim():
+                smooth_dist = smooth_dist.unsqueeze(0)
             target = torch.lerp(
-                target, smooth_dist.unsqueeze(0), smooth_eps)
+                target, smooth_dist, smooth_eps)
 
     # ordinary log-liklihood - use cross_entropy from nn
     if _is_long(target):
@@ -77,5 +79,8 @@ class CrossEntropyLoss(nn.CrossEntropyLoss):
         self.smooth_eps = smooth_eps
         self.smooth_dist = smooth_dist
 
-    def forward(self, input, target):
-        return cross_entropy(input, target, self.weight, self.ignore_index, self.reduction, self.smooth_eps, self.smooth_dist)
+    def forward(self, input, target, smooth_dist=None):
+        if smooth_dist is None:
+            smooth_dist = self.smooth_dist
+        return cross_entropy(input, target, self.weight, self.ignore_index, self.reduction, self.smooth_eps, smooth_dist)
+

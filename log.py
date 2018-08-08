@@ -182,6 +182,7 @@ class ResultsLog(object):
             show(plot)
 
     def plot(self, x, y, title=None, xlabel=None, ylabel=None, legend=None,
+             x_axis_type='linear', y_axis_type='linear',
              width=800, height=400, line_width=2,
              colors=['red', 'green', 'blue', 'orange',
                      'black', 'purple', 'brown'],
@@ -200,7 +201,9 @@ class ResultsLog(object):
         f = figure(title=title, tools=tools,
                    width=width, height=height,
                    x_axis_label=xlabel or x,
-                   y_axis_label=ylabel or '')
+                   y_axis_label=ylabel or '',
+                   x_axis_type=x_axis_type,
+                   y_axis_type=x_axis_type)
         colors = cycle(colors)
         for i, yi in enumerate(y):
             f.line(self.results[x], self.results[yi],

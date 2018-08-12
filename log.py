@@ -30,28 +30,31 @@ def export_args_namespace(args, filename):
         json.dump(dict(args._get_kwargs()), fp, sort_keys=True, indent=4)
 
 
-def setup_logging(log_file='log.txt', resume=False):
+def setup_logging(log_file='log.txt', resume=False, dummy=False):
     """
     Setup logging configuration
     """
-    if os.path.isfile(log_file) and resume:
-        file_mode = 'a'
+    if dummy:
+        logging.getLogger('dummy')
     else:
-        file_mode = 'w'
+        if os.path.isfile(log_file) and resume:
+            file_mode = 'a'
+        else:
+            file_mode = 'w'
 
-    root_logger = logging.getLogger()
-    if root_logger.handlers:
-        root_logger.removeHandler(root_logger.handlers[0])
-    logging.basicConfig(level=logging.DEBUG,
-                        format="%(asctime)s - %(levelname)s - %(message)s",
-                        datefmt="%Y-%m-%d %H:%M:%S",
-                        filename=log_file,
-                        filemode=file_mode)
-    console = logging.StreamHandler()
-    console.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(message)s')
-    console.setFormatter(formatter)
-    logging.getLogger('').addHandler(console)
+        root_logger = logging.getLogger()
+        if root_logger.handlers:
+            root_logger.removeHandler(root_logger.handlers[0])
+        logging.basicConfig(level=logging.DEBUG,
+                            format="%(asctime)s - %(levelname)s - %(message)s",
+                            datefmt="%Y-%m-%d %H:%M:%S",
+                            filename=log_file,
+                            filemode=file_mode)
+        console = logging.StreamHandler()
+        console.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(message)s')
+        console.setFormatter(formatter)
+        logging.getLogger('').addHandler(console)
 
 
 class ResultsLog(object):

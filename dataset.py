@@ -1,5 +1,6 @@
 import torch
 from torch.utils.data import Dataset
+from torch.utils.data.sampler import Sampler, RandomSampler, BatchSampler, _int_classes
 from numpy.random import choice
 
 class RandomSamplerReplacment(torch.utils.data.sampler.Sampler):
@@ -68,3 +69,41 @@ class IdxDataset(Dataset):
 
     def __len__(self):
         return len(self.idxs)
+
+
+from torch.utils.data.sampler import Sampler, RandomSampler, BatchSampler, _int_classes
+
+
+class DuplicateBatchSampler(Sampler):
+    def __init__(self, sampler, batch_size, duplicates, drop_last):
+        if not isinstance(sampler, Sampler):
+            raise ValueError("sampler should be an instance of "
+                             "torch.utils.data.Sampler, but got sampler={}"
+                             .format(sampler))
+        if not isinstance(batch_size, _int_classes) or isinstance(batch_size, bool) or \
+                batch_size <= 0:
+            raise ValueError("batch_size should be a positive integeral value, "
+                             "but got batch_size={}".format(batch_size))
+        if not isinstance(drop_last, bool):
+            raise ValueError("drop_last should be a boolean value, but got "
+                             "drop_last={}".format(drop_last))
+        self.sampler = sampler
+        self.batch_size = batch_size
+        self.drop_last = drop_last
+        self.duplicates = duplicates
+
+    def __iter__(self):
+        batch = []
+        for idx in self.sampler:
+            batch.append(idx)
+            if len(batch) == self.batch_size:
+                yield batch * self.duplicates
+                batch = []
+        if len(batch) > 0 and not self.drop_last:
+            yield batch * self.duplicates
+
+    def __len__(self):
+        if self.drop_last:
+            return len(self.sampler) // self.batch_size
+        else:
+            return (len(self.sampler) + self.batch_size - 1) // self.batch_size

@@ -71,9 +71,6 @@ class IdxDataset(Dataset):
         return len(self.idxs)
 
 
-from torch.utils.data.sampler import Sampler, RandomSampler, BatchSampler, _int_classes
-
-
 class DuplicateBatchSampler(Sampler):
     def __init__(self, sampler, batch_size, duplicates, drop_last):
         if not isinstance(sampler, Sampler):

@@ -38,7 +38,7 @@ class OptimRegime(Regime):
                                                                by_name=filter_name)
         params = (param for _, param in self._named_parameters)
         self.optimizer = torch.optim.SGD(params, lr=0)
-        self.regularizer = regularization.Regularizer(params)
+        self.regularizer = regularization.Regularizer(model)
 
     def update(self, epoch=None, train_steps=None):
         """adjusts optimizer according to current epoch or steps and training regime.
@@ -71,7 +71,7 @@ class OptimRegime(Regime):
         if 'regularizer' in setting:
             reg_setting = deepcopy(setting['regularizer'])
             name = reg_setting.pop('name')
-            self.regularizer = regularization.__dict__[name](self.regularizer.parameters,
+            self.regularizer = regularization.__dict__[name](self.regularizer._model,
                                                              **reg_setting)
 
     def __getstate__(self):

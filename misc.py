@@ -48,3 +48,19 @@ def set_global_seeds(i):
             torch.cuda.manual_seed_all(i)
     np.random.seed(i)
     random.seed(i)
+
+def filtered_named_parameters(model, by_type=None, by_name=None, memo=None):
+    if memo is None:
+        memo = set()
+    if by_name is not None:
+        for name, param in model.named_parameters():
+            if by_name(name) and param not in memo:
+                memo.add(param)
+                yield name, param
+    if by_type is not None:
+        for _, module in model.named_modules():
+            if by_type(module):
+                for name, param in module:
+                    if param not in memo:
+                        memo.add(param)
+                        yield name, param

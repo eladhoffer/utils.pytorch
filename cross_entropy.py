@@ -11,7 +11,7 @@ def _is_long(x):
     return isinstance(x, torch.LongTensor) or isinstance(x, torch.cuda.LongTensor)
 
 
-def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='elementwise_mean', smooth_eps=None, smooth_dist=None):
+def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='mean', smooth_eps=None, smooth_dist=None):
     """cross entropy loss, with support for target distributions and label smoothing https://arxiv.org/abs/1512.00567"""
     smooth_eps = smooth_eps or 0
     onehot_smoothing = False
@@ -73,7 +73,7 @@ def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='ele
 class CrossEntropyLoss(nn.CrossEntropyLoss):
     """CrossEntropyLoss - with ability to recieve distrbution as targets, and optional label smoothing"""
 
-    def __init__(self, weight=None, ignore_index=-100, reduction='elementwise_mean', smooth_eps=None, smooth_dist=None):
+    def __init__(self, weight=None, ignore_index=-100, reduction='mean', smooth_eps=None, smooth_dist=None):
         super(CrossEntropyLoss, self).__init__(weight=weight,
                                                ignore_index=ignore_index, reduction=reduction)
         self.smooth_eps = smooth_eps

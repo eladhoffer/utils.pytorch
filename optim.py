@@ -2,15 +2,12 @@ import torch
 import logging.config
 from copy import deepcopy
 from six import string_types
+from .regime import Regime
+from .param_filter import FilterParameters
+from . import regularization
 
 
-def eval_func(f, x):
-    if isinstance(f, string_types):
-        f = eval(f)
-    return f(x)
-
-
-class OptimRegime(object):
+class OptimRegime(Regime):
     """
     Reconfigures the optimizer according to setting list.
     Exposes optimizer methods - state, step, zero_grad, add_param_group
@@ -31,54 +28,22 @@ class OptimRegime(object):
          }]"
     """
 
-    def __init__(self, params, regime):
-        self.optimizer = torch.optim.SGD(params, lr=0)
-        self.regime = regime
-        self.current_regime_phase = None
-        self.setting = {}
+    def __init__(self, model, regime, defaults={}, filter=None):
+        super(OptimRegime, self).__init__(regime, defaults)
+        if filter is not None:
+            model = FilterParameters(model, **filter)
+        self._named_parameters = model.named_parameters()
+        self.optimizer = torch.optim.SGD(model.parameters(), lr=0)
+        self.regularizer = regularization.Regularizer(model)
 
-    def update(self, epoch, train_steps):
+    def update(self, epoch=None, train_steps=None):
         """adjusts optimizer according to current epoch or steps and training regime.
         """
-        if self.regime is None:
-            return
-        update_optimizer = False
-        if self.current_regime_phase is None:
-            update_optimizer = True
-            setting = {}
-            # Find the first entry where the epoch is smallest than current
-            for regime_phase, regime_setting in enumerate(self.regime):
-                start_epoch = regime_setting.get('epoch', 0)
-                start_step = regime_setting.get('step', 0)
-                if epoch >= start_epoch or train_steps >= start_step:
-                    self.current_regime_phase = regime_phase
-                    break
-        if len(self.regime) > self.current_regime_phase + 1:
-            next_phase = self.current_regime_phase + 1
-            # Any more regime steps?
-            start_epoch = self.regime[next_phase].get('epoch', float('inf'))
-            start_step = self.regime[next_phase].get('step', float('inf'))
-            if epoch >= start_epoch or train_steps >= start_step:
-                self.current_regime_phase = next_phase
-                update_optimizer = True
-
-        setting = deepcopy(self.regime[self.current_regime_phase])
-
-        if 'lr_decay_rate' in setting and 'lr' in setting:
-            decay_steps = setting.get('lr_decay_steps', 100)
-            if train_steps % decay_steps == 0:
-                decay_rate = setting['lr_decay_rate']
-                setting['lr'] *= decay_rate ** (train_steps / decay_steps)
-                update_optimizer = True
-        elif 'step_lambda' in setting:
-            setting.update(eval_func(setting['step_lambda'], train_steps))
-            update_optimizer = True
-        elif 'epoch_lambda' in setting:
-            setting.update(eval_func(setting['epoch_lambda'], epoch))
-            update_optimizer = True
-
-        if update_optimizer:
-            self.adjust(setting)
+        if super(OptimRegime, self).update(epoch, train_steps):
+            self.adjust(self.setting)
+            return True
+        else:
+            return False
 
     def adjust(self, setting):
         """adjusts optimizer according to a setting dict.
@@ -98,7 +63,13 @@ class OptimRegime(object):
                         logging.debug('OPTIMIZER - setting %s = %s' %
                                       (key, setting[key]))
                         param_group[key] = setting[key]
-        self.setting = deepcopy(setting)
+
+        if 'regularizer' in setting:
+            reg_setting = deepcopy(setting['regularizer'])
+            logging.debug('OPTIMIZER - Regularization - %s' % reg_setting)
+            name = reg_setting.pop('name')
+            self.regularizer = regularization.__dict__[name](self.regularizer._model,
+                                                             **reg_setting)
 
     def __getstate__(self):
         return {
@@ -142,16 +113,37 @@ class OptimRegime(object):
             closure (callable): A closure that reevaluates the model and
                 returns the loss. Optional for most optimizers.
         """
+        self.regularizer.pre_step()
         self.optimizer.step(closure)
+        self.regularizer.post_step()
 
-    def add_param_group(self, param_group):
-        """Add a param group to the :class:`Optimizer` s `param_groups`.
 
-        This can be useful when fine tuning a pre-trained network as frozen layers can be made
-        trainable and added to the :class:`Optimizer` as training progresses.
+class MultiOptimRegime(Regime):
+
+    def __init__(self, *optim_regime_list):
+        self.optim_regime_list = []
+        for optim_regime in optim_regime_list:
+            assert isinstance(optim_regime, OptimRegime)
+            self.optim_regime_list.append(optim_regime)
+
+    def update(self, epoch=None, train_steps=None):
+        """adjusts optimizer according to current epoch or steps and training regime.
+        """
+        updated = False
+        for optim in self.optim_regime_list:
+            updated = updated or optim.update(epoch, train_steps)
+        return updated
+
+    def zero_grad(self):
+        """Clears the gradients of all optimized :class:`Variable` s."""
+        for optim in self.optim_regime_list:
+            optim.zero_grad()
+
+    def step(self, closure=None):
+        """Performs a single optimization step (parameter update).
 
         Arguments:
-            param_group (dict): Specifies what Variables should be optimized along with group
-            specific optimization options.
+            closure (callable): A closure that reevaluates the model and
+                returns the loss. Optional for most optimizers.
         """
-        self.optimizer.add_param_group(param_group)
+        self.optimizer.step(closure)

@@ -2,9 +2,9 @@ import torch
 import logging.config
 from copy import deepcopy
 from six import string_types
-from regime import Regime
-from param_filter import FilterParameters
-import regularization
+from .regime import Regime
+from .param_filter import FilterParameters
+from . import regularization
 
 
 class OptimRegime(Regime):
@@ -66,6 +66,7 @@ class OptimRegime(Regime):
 
         if 'regularizer' in setting:
             reg_setting = deepcopy(setting['regularizer'])
+            logging.debug('OPTIMIZER - Regularization - %s' % reg_setting)
             name = reg_setting.pop('name')
             self.regularizer = regularization.__dict__[name](self.regularizer._model,
                                                              **reg_setting)

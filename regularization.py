@@ -1,5 +1,5 @@
 import torch
-from .param_filter import FilterParameters
+from param_filter import FilterParameters
 from torch.nn.utils import clip_grad_norm_
 import logging
 

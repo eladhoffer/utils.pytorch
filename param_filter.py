@@ -26,13 +26,13 @@ class FilterParameters(object):
                                                  module_name=module_name,
                                                  parameter_name=parameter_name))
         elif isinstance(source, torch.nn.Module):  # source is a model
-            self._filtered_param_info = list(filtered_parameter_info(source,
-                                                                     module_fn=module,
-                                                                     module_name_fn=module_name,
-                                                                     parameter_name_fn=parameter_name))
+            self._filtered_parameter_info = list(filtered_parameter_info(source,
+                                                                         module_fn=module,
+                                                                         module_name_fn=module_name,
+                                                                         parameter_name_fn=parameter_name))
 
     def named_parameters(self):
-        for p in self._filtered_param_info:
+        for p in self._filtered_parameter_info:
             yield p['named_parameter']
 
     def parameters(self):
@@ -40,9 +40,9 @@ class FilterParameters(object):
             yield p
 
     def filter(self, module=None, module_name=None, parameter_name=None):
-        for p_info in self._filtered_param_info:
+        for p_info in self._filtered_parameter_info:
             if (module is None or module(p_info['named_module'][1])
-                and (parameter_name is None or module_name(p_info['named_module'][0]))
+                and (module_name is None or module_name(p_info['named_module'][0]))
                     and (parameter_name is None or parameter_name(p_info['named_parameter'][0]))):
                 yield p_info
 

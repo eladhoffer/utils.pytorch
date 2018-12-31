@@ -121,7 +121,7 @@ class OptimRegime(Regime):
         self.regularizer.post_step()
 
 
-class MultiOptimRegime(Regime):
+class MultiOptimRegime(OptimRegime):
 
     def __init__(self, *optim_regime_list):
         self.optim_regime_list = []
@@ -133,8 +133,11 @@ class MultiOptimRegime(Regime):
         """adjusts optimizer according to current epoch or steps and training regime.
         """
         updated = False
-        for optim in self.optim_regime_list:
-            updated = updated or optim.update(epoch, train_steps)
+        for i, optim in enumerate(self.optim_regime_list):
+            current_updated = optim.update(epoch, train_steps)
+            if current_updated:
+                logging.debug('OPTIMIZER #%s was updated' % i)
+            updated = updated or current_updated
         return updated
 
     def zero_grad(self):
@@ -149,4 +152,5 @@ class MultiOptimRegime(Regime):
             closure (callable): A closure that reevaluates the model and
                 returns the loss. Optional for most optimizers.
         """
-        self.optimizer.step(closure)
+        for optim in self.optim_regime_list:
+            optim.step(closure)

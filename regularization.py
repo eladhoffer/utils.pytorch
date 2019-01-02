@@ -37,7 +37,7 @@ class Regularizer(object):
 class L2Regularization(Regularizer):
     def __init__(self, model, value=1e-3,
                  filter={'parameter_name': is_not_bias,
-                         'module_type': is_not_bn},
+                         'module': is_not_bn},
                  pre_op=True, post_op=False, **kwargs):
         super(L2Regularization, self).__init__(
             model, value, filter=filter, **kwargs)
@@ -84,7 +84,7 @@ class GradClip(Regularizer):
 class L1Regularization(Regularizer):
     def __init__(self, model, value=1e-3,
                  filter={'parameter_name': is_not_bias,
-                         'module_type': is_not_bn},
+                         'module': is_not_bn},
                  pre_op=False, post_op=True, report_sparsity=False, **kwargs):
         super(L1Regularization, self).__init__(
             model, value, filter=filter, **kwargs)

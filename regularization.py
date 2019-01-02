@@ -107,9 +107,7 @@ class L1Regularization(Regularizer):
         if self.post_op:
             with torch.no_grad():
                 for n, p in self._named_parameters:
-                    pre_sign = p.sign()
-                    p.add_(-self.value, p.sign())
-                    p.masked_fill_(pre_sign != p.sign(), 0)
+                    p.copy_(torch.nn.functional.softshrink(p, self.value))
                     if self.report_sparsity:
                         logging.debug('Sparsity for %s is %s', n, sparsity(p))
             if self.log:

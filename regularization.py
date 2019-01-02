@@ -16,6 +16,17 @@ def sparsity(p):
     return float(p.eq(0).sum()) / p.nelement()
 
 
+def _norm_exclude_dim(x, dim=0, keepdim=False):
+    dims = tuple(set(range(x.dim())) - set([dim]))
+    return x.pow(2).sum(dims, keepdim=keepdim).sqrt()
+
+
+def _renorm(x, dim=0, inplace=False, eps=1e-12):
+    if not inplace:
+        x = x.clone()
+    return x.div_(_norm_exclude_dim(x, dim, keepdim=True))
+
+
 class Regularizer(object):
     def __init__(self, model, value=1e-3, filter={}, log=False):
         self._model = model
@@ -113,3 +124,25 @@ class L1Regularization(Regularizer):
             if self.log:
                 logging.debug('L1 penalty of %s was applied post optimization step',
                               self.value)
+
+
+class BoundedWeightNorm(Regularizer):
+    def __init__(self, model,
+                 filter={'parameter_name': is_not_bias,
+                         'module': is_not_bn},
+                 dim=0, **kwargs):
+        super(BoundedWeightNorm, self).__init__(
+            model, 0, filter=filter, **kwargs)
+        self.dim = dim
+
+    def pre_step(self):
+        self.prev_norms = {}
+        with torch.no_grad():
+            for n, p in self._named_parameters:
+                self.prev_norms[n] = _norm_exclude_dim(p, self.dim, keepdim=True)
+
+    def post_step(self):
+        with torch.no_grad():
+            for n, p in self._named_parameters:
+                _renorm(p, dim=self.dim, inplace=True)
+                p.mul_(self.prev_norms[n])

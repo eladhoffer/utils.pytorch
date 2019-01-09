@@ -58,14 +58,14 @@ class Regime(object):
         setting.update(self.regime[self.current_regime_phase])
 
         if 'lr_decay_rate' in setting and 'lr' in setting:
-            decay_steps = setting.get('lr_decay_steps', 100)
+            decay_steps = setting.pop('lr_decay_steps', 100)
             if train_steps % decay_steps == 0:
-                decay_rate = setting['lr_decay_rate']
+                decay_rate = setting.pop('lr_decay_rate')
                 setting['lr'] *= decay_rate ** (train_steps / decay_steps)
         elif 'step_lambda' in setting:
-            setting.update(eval_func(setting['step_lambda'], train_steps))
+            setting.update(eval_func(setting.pop('step_lambda'), train_steps))
         elif 'epoch_lambda' in setting:
-            setting.update(eval_func(setting['epoch_lambda'], epoch))
+            setting.update(eval_func(setting.pop('epoch_lambda'), epoch))
         if setting == self.setting:
             return False
         else:

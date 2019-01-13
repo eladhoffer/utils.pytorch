@@ -1,4 +1,17 @@
 import torch
+import torch.nn as nn
+
+
+def is_not_bias(name):
+    return not name.endswith('bias')
+
+
+def is_bn(module):
+    return isinstance(module, nn.BatchNorm1d) or isinstance(module, nn.BatchNorm2d) or isinstance(module, nn.BatchNorm3d)
+
+
+def is_not_bn(module):
+    return not is_bn(module)
 
 
 def filtered_parameter_info(model, module_fn=None, module_name_fn=None, parameter_name_fn=None, memo=None):
@@ -46,6 +59,22 @@ class FilterParameters(object):
                     and (parameter_name is None or parameter_name(p_info['named_parameter'][0]))):
                 yield p_info
 
+    def named_modules(self):
+        for m in self._filtered_parameter_info:
+            yield m['named_module']
+
+    def modules(self):
+        for _, m in self.named_modules():
+            yield m
+
+    def to(self, *kargs, **kwargs):
+        for m in self.modules():
+            print(m)
+            m.to(*kargs, **kwargs)
+
+
+class FilterModules(FilterParameters):
+    pass
 
 if __name__ == '__main__':
     from torchvision.models import resnet50

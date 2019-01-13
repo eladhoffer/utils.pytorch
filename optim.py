@@ -5,6 +5,53 @@ from six import string_types
 from .regime import Regime
 from .param_filter import FilterParameters
 from . import regularization
+import torch.nn as nn
+
+
+def copy_params(param_target, param_src):
+    with torch.no_grad():
+        for p_src, p_target in zip(param_src, param_target):
+            p_target.copy_(p_src)
+
+
+def copy_params_grad(param_target, param_src):
+    for p_src, p_target in zip(param_src, param_target):
+        if p_target.grad is None:
+            p_target.backward(p_src.grad.to(dtype=p_target.dtype))
+        else:
+            p_target.grad.detach().copy_(p_src.grad)
+
+
+class ModuleFloatShadow(nn.Module):
+    def __init__(self, module):
+        super(ModuleFloatShadow, self).__init__()
+        self.original_module = module
+        self.float_module = deepcopy(module)
+        self.float_module.to(dtype=torch.float)
+
+    def parameters(self, *kargs, **kwargs):
+        return self.float_module.parameters(*kargs, **kwargs)
+
+    def named_parameters(self, *kargs, **kwargs):
+        return self.float_module.named_parameters(*kargs, **kwargs)
+
+    def modules(self, *kargs, **kwargs):
+        return self.float_module.modules(*kargs, **kwargs)
+
+    def named_modules(self, *kargs, **kwargs):
+        return self.float_module.named_modules(*kargs, **kwargs)
+
+    def original_parameters(self, *kargs, **kwargs):
+        return self.original_module.parameters(*kargs, **kwargs)
+
+    def original_named_parameters(self, *kargs, **kwargs):
+        return self.original_module.named_parameters(*kargs, **kwargs)
+
+    def original_modules(self, *kargs, **kwargs):
+        return self.original_module.modules(*kargs, **kwargs)
+
+    def original_named_modules(self, *kargs, **kwargs):
+        return self.original_module.named_modules(*kargs, **kwargs)
 
 
 class OptimRegime(Regime):
@@ -28,13 +75,18 @@ class OptimRegime(Regime):
          }]"
     """
 
-    def __init__(self, model, regime, defaults={}, filter=None):
+    def __init__(self, model, regime, defaults={}, filter=None, use_float_copy=False):
         super(OptimRegime, self).__init__(regime, defaults)
         if filter is not None:
             model = FilterParameters(model, **filter)
-        self._named_parameters = model.named_parameters()
-        self.optimizer = torch.optim.SGD(model.parameters(), lr=0)
+        if use_float_copy:
+            model = ModuleFloatShadow(model)
+            self._original_parameters = list(model.original_parameters())
+
+        self.parameters = list(model.parameters())
+        self.optimizer = torch.optim.SGD(self.parameters, lr=0)
         self.regularizer = regularization.Regularizer(model)
+        self.use_float_copy = use_float_copy
 
     def update(self, epoch=None, train_steps=None):
         """adjusts optimizer according to current epoch or steps and training regime.
@@ -108,6 +160,10 @@ class OptimRegime(Regime):
     def zero_grad(self):
         """Clears the gradients of all optimized :class:`Variable` s."""
         self.optimizer.zero_grad()
+        if self.use_float_copy:
+            for p in self._original_parameters:
+                if p.grad is not None:
+                    p.grad.detach().zero_()
 
     def step(self, closure=None):
         """Performs a single optimization step (parameter update).
@@ -116,9 +172,13 @@ class OptimRegime(Regime):
             closure (callable): A closure that reevaluates the model and
                 returns the loss. Optional for most optimizers.
         """
+        if self.use_float_copy:
+            copy_params_grad(self.parameters, self._original_parameters)
         self.regularizer.pre_step()
         self.optimizer.step(closure)
         self.regularizer.post_step()
+        if self.use_float_copy:
+            copy_params(self._original_parameters, self.parameters)
 
 
 class MultiOptimRegime(OptimRegime):

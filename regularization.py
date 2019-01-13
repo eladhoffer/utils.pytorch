@@ -1,15 +1,7 @@
 import torch
-from .param_filter import FilterParameters
+from .param_filter import FilterParameters, is_not_bn, is_not_bias
 from torch.nn.utils import clip_grad_norm_
 import logging
-
-
-def is_not_bias(name):
-    return not name.endswith('bias')
-
-
-def is_not_bn(module):
-    return not isinstance(module, torch.nn.BatchNorm2d)
 
 
 def sparsity(p):

@@ -66,6 +66,15 @@ class Regime(object):
             setting.update(eval_func(setting.pop('step_lambda'), train_steps))
         elif 'epoch_lambda' in setting:
             setting.update(eval_func(setting.pop('epoch_lambda'), epoch))
+
+        if 'execute' in setting:
+            setting.pop('execute')()
+
+        if 'execute_once' in setting:
+            setting.pop('execute_once')()
+            # remove from regime, so won't happen again
+            self.regime[self.current_regime_phase].pop('execute_once', None)
+
         if setting == self.setting:
             return False
         else:

@@ -30,11 +30,45 @@ class Regularizer(object):
             logging.debug('Applying regularization to parameters: %s',
                           [n for n, _ in self._named_parameters])
 
+    def named_parameters(self):
+        for n, p in self._named_parameters:
+            yield n, p
+
+    def parameters(self):
+        for _, p in self.named_parameters():
+            yield p
+
+    def _pre_parameter_step(self, parameter):
+        pass
+
+    def _post_parameter_step(self, parameter):
+        pass
+
     def pre_step(self):
         pass
 
     def post_step(self):
         pass
+
+
+class RegularizerList(Regularizer):
+    def __init__(self, model, regularization_list):
+        """each item must of of format (RegClass, **kwargs) or instance of Regularizer"""
+        super(RegularizerList, self).__init__(model)
+        self.regularization_list = []
+        for regularizer in regularization_list:
+            if not isinstance(regularizer, Regularizer):
+                reg, reg_params = regularizer
+                regularizer = reg(model=model, **reg_params)
+            self.regularization_list.append(regularizer)
+
+    def pre_step(self):
+        for reg in self.regularization_list:
+            reg.pre_step()
+
+    def post_step(self):
+        for reg in self.regularization_list:
+            reg.post_step()
 
 
 class L2Regularization(Regularizer):
@@ -78,7 +112,7 @@ class GradClip(Regularizer):
     def pre_step(self):
         if self.value > 0:
             with torch.no_grad():
-                grad = clip_grad_norm_(self._named_parameters, self.value)
+                grad = clip_grad_norm_(self.parameters(), self.value)
             if self.log:
                 logging.debug('Gradient value was clipped from %s to %s',
                               grad, self.value)
@@ -131,7 +165,8 @@ class BoundedWeightNorm(Regularizer):
         self.prev_norms = {}
         with torch.no_grad():
             for n, p in self._named_parameters:
-                self.prev_norms[n] = _norm_exclude_dim(p, self.dim, keepdim=True)
+                self.prev_norms[n] = _norm_exclude_dim(
+                    p, self.dim, keepdim=True)
 
     def post_step(self):
         with torch.no_grad():

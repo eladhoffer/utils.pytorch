@@ -117,14 +117,19 @@ class OptimRegime(Regime):
                         param_group[key] = setting[key]
 
         if 'regularizer' in setting:
-            if isinstance(setting['regularizer'], dict):
-                reg_setting = deepcopy(setting['regularizer'])
-                logging.debug('OPTIMIZER - Regularization - %s' % reg_setting)
-                name = reg_setting.pop('name')
-                self.regularizer = regularization.__dict__[name](self.regularizer._model,
-                                                                 **reg_setting)
-            else:
-                self.regularizer = setting['regularizer']
+            reg_list = deepcopy(setting['regularizer'])
+            if not (isinstance(reg_list, list) or isinstance(reg_list, tuple)):
+                reg_list = (reg_list,)
+            regularizers = []
+            for reg in reg_list:
+                if isinstance(reg, dict):
+                    logging.debug('OPTIMIZER - Regularization - %s' % reg)
+                    name = reg.pop('name')
+                    regularizers.append((regularization.__dict__[name], reg))
+                else:
+                    regularizers.append(reg)
+            self.regularizer = regularization.RegularizerList(self.regularizer._model,
+                                                              regularizers)
 
     def __getstate__(self):
         return {

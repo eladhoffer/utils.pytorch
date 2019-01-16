@@ -48,6 +48,8 @@ class Regime(object):
                 if epoch >= start_epoch or train_steps >= start_step:
                     self.current_regime_phase = regime_phase
                     break
+                # each entry is updated from previous
+                setting.update(regime_setting)
         if len(self.regime) > self.current_regime_phase + 1:
             next_phase = self.current_regime_phase + 1
             # Any more regime steps?

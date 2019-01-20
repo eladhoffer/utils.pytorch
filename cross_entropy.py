@@ -64,7 +64,7 @@ def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='mea
 
     ce = kl + entropy
 
-    if reduction == 'elementwise_mean':
+    if reduction == 'mean':
         ce /= logits.size(0)
 
     return ce

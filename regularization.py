@@ -178,17 +178,18 @@ class BoundedWeightNorm(Regularizer):
 
     def pre_step(self):
         self.prev_norms = {}
-        with torch.no_grad():
-            for n, p in self._named_parameters:
-                self.prev_norms[n] = _norm_exclude_dim(
-                    p, self.dim, keepdim=True)
-                p.grad.mul_(p/self.prev_norms[n])
+        for n, p in self._named_parameters:
+            norm = _norm_exclude_dim(p, self.dim, keepdim=True)
+            curr_grad = p.grad.data.clone()
+            p.grad.data.zero_()
+            norm.backward(curr_grad)
+            self.prev_norms[n] = norm.detach()
 
     def post_step(self):
         with torch.no_grad():
             for n, p in self._named_parameters:
-                _renorm(p, dim=self.dim, inplace=True)
-                p.mul_(self.prev_norms[n])
+                new_norm = _norm_exclude_dim(p,dim=self.dim, keepdim=True)
+                p.mul_(self.prev_norms[n] / new_norm)
 
 
 class LARS(Regularizer):

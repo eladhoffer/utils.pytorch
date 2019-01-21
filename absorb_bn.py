@@ -22,7 +22,8 @@ def absorb_bn(module, bn_module, remove_bn=True, verbose=False):
     if module.bias is None:
         zeros = torch.zeros(module.out_channels,
                             dtype=w.dtype, device=w.device)
-        module.bias = nn.Parameter(zeros)
+        bias = nn.Parameter(zeros)
+        module.register_parameter('bias', bias)
     b = module.bias.data
     invstd = bn_module.running_var.clone().add_(bn_module.eps).pow_(-0.5)
     w.mul_(invstd.view(w.size(0), 1, 1, 1))

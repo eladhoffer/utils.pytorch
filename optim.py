@@ -126,8 +126,10 @@ class OptimRegime(Regime):
                     logging.debug('OPTIMIZER - Regularization - %s' % reg)
                     name = reg.pop('name')
                     regularizers.append((regularization.__dict__[name], reg))
-                else:
+                elif isinstance(reg, regularization.Regularizer):
                     regularizers.append(reg)
+                else:  # callable on model
+                    regularizers.append(reg(self.regularizer._model))
             self.regularizer = regularization.RegularizerList(self.regularizer._model,
                                                               regularizers)
 
@@ -184,6 +186,16 @@ class OptimRegime(Regime):
         self.regularizer.post_step()
         if self.use_float_copy:
             copy_params(self._original_parameters, self.parameters)
+
+    def pre_forward(self):
+        """ allows modification pre-forward pass - e.g for regularization
+        """
+        self.regularizer.pre_forward()
+
+    def pre_backward(self):
+        """ allows modification post-forward pass and pre-backward - e.g for regularization
+        """
+        self.regularizer.pre_backward()
 
 
 class MultiOptimRegime(OptimRegime):

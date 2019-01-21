@@ -49,6 +49,12 @@ class Regularizer(object):
 
     def post_step(self):
         pass
+    
+    def pre_forward(self):
+        pass
+    
+    def pre_backward(self):
+        pass
 
 
 class RegularizerList(Regularizer):

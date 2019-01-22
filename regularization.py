@@ -228,7 +228,7 @@ class LARS(Regularizer):
     """Large Batch Training of Convolutional Networks - https://arxiv.org/abs/1708.03888
     """
 
-    def __init__(self, model, value=0.01, weight_decay=0, dim=None, p=2,
+    def __init__(self, model, value=0.01, weight_decay=0, dim=None, p=2, min_scale=None, max_scale=None,
                  filter={'parameter_name': is_not_bias,
                          'module': is_not_bn},
                  **kwargs):
@@ -236,6 +236,8 @@ class LARS(Regularizer):
         self.weight_decay = weight_decay
         self.dim = dim
         self.p = p
+        self.min_scale = min_scale
+        self.max_scale = max_scale
 
     def pre_step(self):
         with torch.no_grad():
@@ -247,7 +249,10 @@ class LARS(Regularizer):
                 else:
                     norm = param.norm(p=self.p)
                     grad_norm = param.grad.norm(p=self.p)
-                param.grad.mul_(self.value * norm/grad_norm)
+                scale = self.value * norm/grad_norm
+                if self.min_scale is not None or self.max_scale is not None:
+                    scale.clamp_(min=self.min_scale, max=self.max_scale)
+                param.grad.mul_(scale)
 
 
 class DropConnect(Regularizer):

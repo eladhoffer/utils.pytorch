@@ -69,7 +69,6 @@ class FilterParameters(object):
 
     def to(self, *kargs, **kwargs):
         for m in self.modules():
-            print(m)
             m.to(*kargs, **kwargs)
 
 

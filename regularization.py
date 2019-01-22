@@ -20,6 +20,26 @@ def _renorm(x, dim=0, inplace=False, eps=1e-12):
     return x.div_(_norm_exclude_dim(x, dim, keepdim=True))
 
 
+def _norm(x, dim, p=2):
+    """Computes the norm over all dimensions except dim"""
+    if p == -1:
+        def func(x, dim): return x.max(dim=dim)[0] - x.min(dim=dim)[0]
+    elif p == float('inf'):
+        def func(x, dim): return x.max(dim=dim)[0]
+    else:
+        def func(x, dim): return torch.norm(x, dim=dim, p=p)
+    if dim is None:
+        return x.norm(p=p)
+    elif dim == 0:
+        output_size = (x.size(0),) + (1,) * (x.dim() - 1)
+        return func(x.contiguous().view(x.size(0), -1), 1).view(*output_size)
+    elif dim == x.dim() - 1:
+        output_size = (1,) * (x.dim() - 1) + (x.size(-1),)
+        return func(x.contiguous().view(-1, x.size(-1)), 0).view(*output_size)
+    else:
+        return _norm(x.transpose(0, dim), 0).transpose(0, dim)
+
+
 class Regularizer(object):
     def __init__(self, model, value=1e-3, filter={}, log=False):
         self._model = model
@@ -171,46 +191,63 @@ class BoundedWeightNorm(Regularizer):
     def __init__(self, model,
                  filter={'parameter_name': is_not_bias,
                          'module': is_not_bn},
-                 dim=0, **kwargs):
+                 dim=0, p=2, **kwargs):
         super(BoundedWeightNorm, self).__init__(
             model, 0, filter=filter, **kwargs)
         self.dim = dim
+        self.init_norms = None
+        self.p = p
 
-    def pre_step(self):
-        self.prev_norms = {}
-        for n, p in self._named_parameters:
-            norm = _norm_exclude_dim(p, self.dim, keepdim=True)
-            curr_grad = p.grad.data.clone()
-            p.grad.data.zero_()
-            norm.backward(curr_grad)
-            self.prev_norms[n] = norm.detach()
-
-    def post_step(self):
+    def _gather_init_norm(self):
+        self.init_norms = {}
         with torch.no_grad():
             for n, p in self._named_parameters:
-                new_norm = _norm_exclude_dim(p,dim=self.dim, keepdim=True)
-                p.mul_(self.prev_norms[n] / new_norm)
+                self.init_norms[n] = _norm(
+                    p, self.dim, p=self.p).detach().mean()
+
+    def pre_forward(self):
+        if self.init_norms is None:
+            self._gather_init_norm()
+        with torch.no_grad():
+            for n, p in self._named_parameters:
+                init_norm = self.init_norms[n]
+                new_norm = _norm(p, self.dim, p=self.p)
+                p.mul_(init_norm / new_norm)
+
+    def pre_step(self):
+        for n, p in self._named_parameters:
+            init_norm = self.init_norms[n]
+            norm = _norm(p, self.dim, p=self.p)
+            curr_grad = p.grad.data.clone()
+            p.grad.data.zero_()
+            p_normed = p * (init_norm / norm)
+            p_normed.backward(curr_grad)
 
 
 class LARS(Regularizer):
     """Large Batch Training of Convolutional Networks - https://arxiv.org/abs/1708.03888
     """
 
-    def __init__(self, model, value=1, beta=0,
+    def __init__(self, model, value=0.01, weight_decay=0, dim=None, p=2,
                  filter={'parameter_name': is_not_bias,
                          'module': is_not_bn},
                  **kwargs):
         super(LARS, self).__init__(model, value, filter=filter, **kwargs)
-        self.beta = beta
+        self.weight_decay = weight_decay
+        self.dim = dim
+        self.p = p
 
     def pre_step(self):
         with torch.no_grad():
-            for _, p in self._named_parameters:
-                norm = p.norm()
-                grad_norm = p.grad.norm()
-                if self.beta > 0:
-                    grad_norm += self.beta * norm
-                p.grad.mul_(self.value * norm/grad_norm)
+            for _, param in self._named_parameters:
+                param.grad.add_(self.weight_decay, param)
+                if self.dim is not None:
+                    norm = _norm(param, dim=self.dim, p=self.p)
+                    grad_norm = _norm(param.grad, dim=self.dim, p=self.p)
+                else:
+                    norm = param.norm(p=self.p)
+                    grad_norm = param.grad.norm(p=self.p)
+                param.grad.mul_(self.value * norm/grad_norm)
 
 
 class DropConnect(Regularizer):
@@ -250,9 +287,10 @@ class DropConnect(Regularizer):
 class AbsorbBN(Regularizer):
     def __init__(self, model, remove_bn=False):
         self._model = model
-        for m in model.modules():
-            if isinstance(m, torch.nn.BatchNorm2d):
-                m.momentum = 1
+        if not remove_bn:
+            for m in model.modules():
+                if isinstance(m, torch.nn.BatchNorm2d):
+                    m.momentum = 1
         self.remove_bn = remove_bn
         self._removed = False
 

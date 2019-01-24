@@ -1,3 +1,6 @@
+from io import BytesIO
+import pickle
+import PIL
 import torch
 from torch.utils.data import Dataset
 from torch.utils.data.sampler import Sampler, RandomSampler, BatchSampler, _int_classes
@@ -69,6 +72,71 @@ class IdxDataset(Dataset):
 
     def __len__(self):
         return len(self.idxs)
+
+
+def image_loader(imagebytes):
+    img = PIL.Image.open(BytesIO(imagebytes))
+    return img.convert('RGB')
+
+
+class IndexedFileDataset(Dataset):
+    """ A dataset that consists of an indexed file (with sample offsets in
+        another file). For example, a .tar that contains image files.
+        The dataset does not extract the samples, but works with the indexed
+        file directly.
+        NOTE: The index file is assumed to be a pickled list of 3-tuples:
+        (name, offset, size).
+    """
+    def __init__(self, filename, index_filename=None, extract_target_fn=None,
+                 transform=None, target_transform=None, loader=image_loader):
+        super(IndexedFileDataset, self).__init__()
+
+        # Defaults
+        if index_filename is None:
+            index_filename = filename + '.index'
+        if extract_target_fn is None:
+            extract_target_fn = lambda *args: args
+
+        # Read index
+        with open(index_filename, 'rb') as index_fp:
+            sample_list = pickle.load(index_fp)
+
+        # Collect unique targets (sorted by name)
+        targetset = set(extract_target_fn(target) for target, _, _ in sample_list)
+        targetmap = {target: i for i, target in enumerate(sorted(targetset))}
+
+        self.samples = [(targetmap[extract_target_fn(target)], offset, size)
+                        for target, offset, size in sample_list]
+        self.filename = filename
+
+        self.loader = loader
+        self.transform = transform
+        self.target_transform = target_transform
+
+    def _get_sample(self, fp, idx):
+        target, offset, size = self.samples[idx]
+        fp.seek(offset)
+        sample = self.loader(fp.read(size))
+
+        if self.transform is not None:
+            sample = self.transform(sample)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return sample, target
+
+    def __getitem__(self, index):
+        with open(self.filename, 'rb') as fp:
+            # Handle slices
+            if isinstance(index, slice):
+                return [self._get_sample(fp, subidx) for subidx in
+                        range(index.start or 0, index.stop or len(self),
+                              index.step or 1)]
+
+            return self._get_sample(fp, index)
+
+    def __len__(self):
+        return len(self.samples)
 
 
 class DuplicateBatchSampler(Sampler):

@@ -11,7 +11,8 @@ def _is_long(x):
     return isinstance(x, torch.LongTensor) or isinstance(x, torch.cuda.LongTensor)
 
 
-def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='mean', smooth_eps=None, smooth_dist=None):
+def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='mean',
+                  smooth_eps=None, smooth_dist=None, eps=1e-8):
     """cross entropy loss, with support for target distributions and label smoothing https://arxiv.org/abs/1512.00567"""
     smooth_eps = smooth_eps or 0
     onehot_smoothing = False
@@ -60,7 +61,7 @@ def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='mea
     else:
         if ignore_mask is not None:
             target = target.masked_select(ignore_mask.unsqueeze(-1))
-        entropy = -(target * target.log()).sum()
+        entropy = -(target * (target + eps).log()).sum()
 
     ce = kl + entropy
 
@@ -83,4 +84,3 @@ class CrossEntropyLoss(nn.CrossEntropyLoss):
         if smooth_dist is None:
             smooth_dist = self.smooth_dist
         return cross_entropy(input, target, self.weight, self.ignore_index, self.reduction, self.smooth_eps, smooth_dist)
-

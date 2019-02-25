@@ -11,6 +11,7 @@ class MixUp(nn.Module):
         self.reset()
 
     def reset(self):
+        self.enabled = False
         self.mix_values = None
         self.mix_index = None
 
@@ -23,13 +24,19 @@ class MixUp(nn.Module):
             mix_val = self.mix_values.to(device=x1.device).view(*view)
             return mix_val * x1 + (1.-mix_val) * x2
 
-    def sample(self, alpha, batch_size):
-        values = beta(alpha, alpha, size=batch_size)
+    def sample(self, alpha, batch_size, sample_batch=False):
         self.mix_index = torch.randperm(batch_size)
-        self.mix_values = torch.tensor(values, dtype=torch.float)
+        if sample_batch:
+            values = beta(alpha, alpha, size=batch_size)
+            self.mix_values = torch.tensor(values, dtype=torch.float)
+        else:
+            self.mix_values = torch.tensor([beta(alpha, alpha)],
+                                           dtype=torch.float)
 
     def mix_target(self, y, n_class):
-        if self.mix_values is None or self.mix_values is None:
+        if not self.training or \
+            self.mix_values is None or\
+                self.mix_values is None:
             return y
         y = onehot(y, n_class).to(dtype=torch.float)
         idx = self.mix_index.to(device=y.device)
@@ -37,7 +44,9 @@ class MixUp(nn.Module):
         return self.mix(y, y_mix)
 
     def forward(self, x):
-        if self.mix_values is None or self.mix_values is None:
+        if not self.training or \
+            self.mix_values is None or\
+                self.mix_values is None:
             return x
         idx = self.mix_index.to(device=x.device)
         x_mix = x.index_select(self.batch_dim, idx)

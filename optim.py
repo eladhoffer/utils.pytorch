@@ -7,6 +7,14 @@ from .param_filter import FilterParameters
 from . import regularization
 import torch.nn as nn
 
+_OPTIMIZERS = {name: func for name, func in torch.optim.__dict__.items()}
+
+try:
+    from adabound import AdaBound
+    _OPTIMIZERS['AdaBound'] = AdaBound
+except ImportError:
+    pass
+
 
 def copy_params(param_target, param_src):
     with torch.no_grad():
@@ -102,7 +110,7 @@ class OptimRegime(Regime):
         e.g: setting={optimizer': 'Adam', 'lr': 5e-4}
         """
         if 'optimizer' in setting:
-            optim_method = torch.optim.__dict__[setting['optimizer']]
+            optim_method = _OPTIMIZERS[setting['optimizer']]
             if not isinstance(self.optimizer, optim_method):
                 self.optimizer = optim_method(self.optimizer.param_groups)
                 logging.debug('OPTIMIZER - setting method = %s' %
@@ -115,6 +123,10 @@ class OptimRegime(Regime):
                         logging.debug('OPTIMIZER - setting %s = %s' %
                                       (key, setting[key]))
                         param_group[key] = setting[key]
+                        # fix for AdaBound
+                        if key == 'lr' and hasattr(self.optimizer, 'base_lrs'):
+                            self.optimizer.base_lrs = list(
+                                map(lambda group: group['lr'], self.optimizer.param_groups))
 
         if 'regularizer' in setting:
             reg_list = deepcopy(setting['regularizer'])

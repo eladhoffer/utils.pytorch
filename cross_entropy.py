@@ -12,7 +12,7 @@ def _is_long(x):
 
 
 def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='mean',
-                  smooth_eps=None, smooth_dist=None, eps=1e-8):
+                  smooth_eps=None, smooth_dist=None, eps=1e-8, stochastic=False):
     """cross entropy loss, with support for target distributions and label smoothing https://arxiv.org/abs/1512.00567"""
     smooth_eps = smooth_eps or 0
     onehot_smoothing = False
@@ -23,6 +23,10 @@ def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='mea
             if ignore_index >= 0:
                 ignore_mask = target.eq(ignore_index)
             target = onehot(target, num_classes).type_as(logits)
+        if stochastic:
+            smooth_dist = torch.rand_like(target)
+            smooth_dist.div_(smooth_dist.sum(-1, keepdim=True))
+            
         if smooth_dist is None:
             target = (1 - smooth_eps) * target + \
                 smooth_eps / num_classes
@@ -30,8 +34,7 @@ def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='mea
         else:
             if smooth_dist.dim() < target.dim():
                 smooth_dist = smooth_dist.unsqueeze(0)
-            target = torch.lerp(
-                target, smooth_dist, smooth_eps)
+            target.lerp_(smooth_dist, smooth_eps)
 
     # ordinary log-liklihood - use cross_entropy from nn
     if _is_long(target):

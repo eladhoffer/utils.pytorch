@@ -12,66 +12,58 @@ def _is_long(x):
 
 
 def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='mean',
-                  smooth_eps=None, smooth_dist=None, eps=1e-8, stochastic=False):
+                  smooth_eps=None, smooth_dist=None, stochastic=False):
     """cross entropy loss, with support for target distributions and label smoothing https://arxiv.org/abs/1512.00567"""
     smooth_eps = smooth_eps or 0
-    onehot_smoothing = False
-    ignore_mask = None
+
+    # ordinary log-liklihood - use cross_entropy from nn
+    if _is_long(target) and smooth_eps == 0:
+        return F.cross_entropy(logits, target, weight, ignore_index=ignore_index, reduction=reduction)
+
+    masked_indices = None
     if smooth_eps > 0:
         num_classes = logits.size(-1)
         if _is_long(target):
             if ignore_index >= 0:
-                ignore_mask = target.eq(ignore_index)
-            target = onehot(target, num_classes).type_as(logits)
+                masked_indices = target.eq(ignore_index)
         if stochastic:
-            smooth_dist = torch.rand_like(target)
-            smooth_dist.div_(smooth_dist.sum(-1, keepdim=True))
-            
-        if smooth_dist is None:
-            target = (1 - smooth_eps) * target + \
-                smooth_eps / num_classes
-            onehot_smoothing = True
-        else:
+            uniform_noise = torch.rand_like(target)
+            uniform_noise.div_(smooth_dist.sum(-1, keepdim=True))
+            smooth_dist = uniform_noise if smooth_dist is None else\
+                smooth_dist + uniform_noise
+
+        if smooth_dist is not None:
+            if _is_long(target):
+                target = onehot(target, num_classes).type_as(logits)
             if smooth_dist.dim() < target.dim():
                 smooth_dist = smooth_dist.unsqueeze(0)
             target.lerp_(smooth_dist, smooth_eps)
-
-    # ordinary log-liklihood - use cross_entropy from nn
-    if _is_long(target):
-        return F.cross_entropy(logits, target, weight, ignore_index=ignore_index, reduction=reduction)
 
     # cross entropy with real target distribution
     lsm = F.log_softmax(logits, dim=-1)
 
     if weight is not None:
-        target = target * weight.unsqueeze(0)
-    if ignore_mask is None and weight is None:
-        kl = F.kl_div(lsm, target, reduction='sum' if reduction !=
-                      'none' else 'none')
+        lsm = lsm * weight.unsqueeze(0)
+
+    if _is_long(target):
+        nll = -lsm.gather(dim=-1, index=target.unsqueeze(-1))
+        smoothing = -lsm.sum(-1) / num_classes
+        loss = (1. - smooth_eps) * nll + smooth_eps * smoothing
     else:
-        kl = F.kl_div(lsm, target, reduction='none')
-        if ignore_mask is not None:
-            kl.masked_fill_(ignore_mask.unsqueeze(-1), 0)
-        if weight is not None:
-            kl = kl * weight.unsqueeze(0)
-        if reduction != 'none':
-            kl = kl.sum()
+        loss = -(target * lsm).sum(-1)
 
-    # for label smoothing with parameter eps:
-    if onehot_smoothing:
-        entropy = -(math.log(1 - smooth_eps) + smooth_eps *
-                    math.log(smooth_eps / ((num_classes - 1) * (1 - smooth_eps))))
-    else:
-        if ignore_mask is not None:
-            target = target.masked_select(ignore_mask.unsqueeze(-1))
-        entropy = -(target * (target + eps).log()).sum()
+    if masked_indices is not None:
+        loss.masked_fill_(masked_indices, 0)
 
-    ce = kl + entropy
+    if reduction == 'sum':
+        loss = loss.sum()
+    elif reduction == 'mean':
+        if masked_indices is None:
+            loss = loss.mean()
+        else:
+            loss = loss.sum() / float(loss.size(0) - masked_indices.sum())
 
-    if reduction == 'mean':
-        ce /= logits.size(0)
-
-    return ce
+    return loss
 
 
 class CrossEntropyLoss(nn.CrossEntropyLoss):

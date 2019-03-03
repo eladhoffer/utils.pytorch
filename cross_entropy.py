@@ -21,25 +21,19 @@ def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='mea
         return F.cross_entropy(logits, target, weight, ignore_index=ignore_index, reduction=reduction)
 
     masked_indices = None
-    if smooth_eps > 0:
-        num_classes = logits.size(-1)
+    num_classes = logits.size(-1)
+
+    if _is_long(target) and ignore_index >= 0:
+        masked_indices = target.eq(ignore_index)
+
+    if smooth_eps > 0 and smooth_dist is not None:
         if _is_long(target):
-            if ignore_index >= 0:
-                masked_indices = target.eq(ignore_index)
-        if stochastic:
-            uniform_noise = torch.rand_like(target)
-            uniform_noise.div_(smooth_dist.sum(-1, keepdim=True))
-            smooth_dist = uniform_noise if smooth_dist is None else\
-                smooth_dist + uniform_noise
+            target = onehot(target, num_classes).type_as(logits)
+        if smooth_dist.dim() < target.dim():
+            smooth_dist = smooth_dist.unsqueeze(0)
+        target.lerp_(smooth_dist, smooth_eps)
 
-        if smooth_dist is not None:
-            if _is_long(target):
-                target = onehot(target, num_classes).type_as(logits)
-            if smooth_dist.dim() < target.dim():
-                smooth_dist = smooth_dist.unsqueeze(0)
-            target.lerp_(smooth_dist, smooth_eps)
-
-    # cross entropy with real target distribution
+    # log-softmax of logits
     lsm = F.log_softmax(logits, dim=-1)
 
     if weight is not None:

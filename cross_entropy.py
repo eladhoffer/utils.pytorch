@@ -40,9 +40,10 @@ def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='mea
         lsm = lsm * weight.unsqueeze(0)
 
     if _is_long(target):
-        eps = smooth_eps / (num_classes - 1)
-        nll = -lsm.gather(dim=-1, index=target.unsqueeze(-1)).squeeze(-1)
-        loss = (1. - 2 * eps) * nll - eps * lsm.sum(-1)
+        eps_sum = smooth_eps / (num_classes - 1.)
+        eps_nll = 1. - eps_sum - smooth_eps
+        lsm_t = lsm.gather(dim=-1, index=target.unsqueeze(-1)).squeeze(-1)
+        loss = -(eps_nll * lsm_t + eps_sum * lsm.sum(-1))
     else:
         loss = -(target * lsm).sum(-1)
 

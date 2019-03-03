@@ -12,7 +12,7 @@ def _is_long(x):
 
 
 def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='mean',
-                  smooth_eps=None, smooth_dist=None, stochastic=False):
+                  smooth_eps=None, smooth_dist=None):
     """cross entropy loss, with support for target distributions and label smoothing https://arxiv.org/abs/1512.00567"""
     smooth_eps = smooth_eps or 0
 
@@ -40,9 +40,9 @@ def cross_entropy(logits, target, weight=None, ignore_index=-100, reduction='mea
         lsm = lsm * weight.unsqueeze(0)
 
     if _is_long(target):
+        eps = smooth_eps / (num_classes - 1)
         nll = -lsm.gather(dim=-1, index=target.unsqueeze(-1))
-        smoothing = -lsm.sum(-1) / num_classes
-        loss = (1. - smooth_eps) * nll + smooth_eps * smoothing
+        loss = (1. - 2 * eps) * nll - eps * lsm.sum(-1)
     else:
         loss = -(target * lsm).sum(-1)
 

@@ -46,7 +46,7 @@ def cross_entropy(inputs, target, weight=None, ignore_index=-100, reduction='mea
         lsm = lsm * weight.unsqueeze(0)
 
     if _is_long(target):
-        eps_sum = smooth_eps / (num_classes - 1.)
+        eps_sum = smooth_eps / num_classes
         eps_nll = 1. - eps_sum - smooth_eps
         likelihood = lsm.gather(dim=-1, index=target.unsqueeze(-1)).squeeze(-1)
         loss = -(eps_nll * likelihood + eps_sum * lsm.sum(-1))

@@ -109,8 +109,12 @@ class OptimRegime(Regime):
         """adjusts optimizer according to a setting dict.
         e.g: setting={optimizer': 'Adam', 'lr': 5e-4}
         """
-        if 'optimizer' in setting:
-            optim_method = _OPTIMIZERS[setting['optimizer']]
+        reset = setting.get('reset', False)
+        if 'optimizer' in setting or reset:
+            optim_method = _OPTIMIZERS[setting.get('optimizer', 'SGD')]
+            if reset:  # reset the optimizer cache:
+                self.optimizer = torch.optim.SGD(self.parameters, lr=0)
+                logging.debug('OPTIMIZER - reset setting')
             if not isinstance(self.optimizer, optim_method):
                 self.optimizer = optim_method(self.optimizer.param_groups)
                 logging.debug('OPTIMIZER - setting method = %s' %
@@ -135,7 +139,6 @@ class OptimRegime(Regime):
             regularizers = []
             for reg in reg_list:
                 if isinstance(reg, dict):
-                    logging.debug('OPTIMIZER - Regularization - %s' % reg)
                     name = reg.pop('name')
                     regularizers.append((regularization.__dict__[name], reg))
                 elif isinstance(reg, regularization.Regularizer):

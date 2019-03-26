@@ -82,3 +82,6 @@ class Regime(object):
         else:
             self.setting = setting
             return True
+
+    def __repr__(self):
+        return str(self.regime)

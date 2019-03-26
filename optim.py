@@ -246,3 +246,14 @@ class MultiOptimRegime(OptimRegime):
         """
         for optim in self.optim_regime_list:
             optim.step(closure)
+
+    def pre_forward(self):
+        for optim in self.optim_regime_list:
+            optim.pre_forward()
+
+    def pre_backward(self):
+        for optim in self.optim_regime_list:
+            optim.pre_backward()
+
+    def __repr__(self):
+        return str([str(optim) for optim in self.optim_regime_list])

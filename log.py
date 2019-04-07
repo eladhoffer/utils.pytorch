@@ -207,9 +207,9 @@ class ResultsLog(object):
         path = path or self.data_path
         if os.path.isfile(path):
             if self.data_format == 'json':
-                self.results.read_json(path)
+                self.results = pd.read_json(path)
             else:
-                self.results.read_csv(path)
+                self.results = pd.read_csv(path)
         else:
             raise ValueError('{} isn''t a file'.format(path))
 

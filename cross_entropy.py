@@ -92,9 +92,9 @@ def binary_cross_entropy(inputs, target, weight=None, reduction='mean', smooth_e
         target = target.float()
         target.add_(smooth_eps).div_(2.)
     if from_logits:
-        return F.binary_cross_entropy(inputs, target, weight=weight, reduction=reduction)
-    else:
         return F.binary_cross_entropy_with_logits(inputs, target, weight=weight, reduction=reduction)
+    else:
+        return F.binary_cross_entropy(inputs, target, weight=weight, reduction=reduction)
 
 
 def binary_cross_entropy_with_logits(inputs, target, weight=None, reduction='mean', smooth_eps=None, from_logits=True):

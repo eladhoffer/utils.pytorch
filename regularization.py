@@ -304,3 +304,47 @@ class AbsorbBN(Regularizer):
             return
         search_absorbe_bn(self._model, remove_bn=self.remove_bn, verbose=False)
         self._removed = self.remove_bn
+
+
+class Consolidate(Regularizer):
+    """ groups is a list of tuples, each tuple is of consolidated parameters (of same size)
+    """
+
+    def __init__(self, model, value=0.1, force=False, **kwargs):
+        super(Consolidate, self).__init__(
+            model, value, **kwargs)
+        self.force = force
+        shared_params = {}
+        for name, param in self._named_parameters:
+            numel = param.numel()
+            shared_params.setdefault(numel, [])
+            shared_params[numel].append((name, param))
+
+        self.groups = []
+        shared_names = []
+        for shared_list in shared_params.values():
+            if len(shared_list) < 2:
+                continue
+            names, params = zip(*shared_list)
+            self.groups.append(params)
+            shared_names.append(names)
+
+        logging.debug('Shared parameter groups %s' % shared_names)
+
+    def pre_step(self):
+        with torch.no_grad():
+            for i, group in enumerate(self.groups):
+                mean_group = sum(group) / len(group)
+                for p in group:
+                    p.grad.data.add_(self.value, p - mean_group)
+                if self.log:
+                    logging.debug('group %s, diff norm = %s' %
+                                  (i, float(sum([(p - mean_group).norm() ** 2 for p in group]).sqrt())))
+
+    def post_step(self):
+        if self.force:
+            with torch.no_grad():
+                for group in enumerate(self.groups):
+                    mean_group = sum(group) / len(group)
+                    for p in group:
+                        p.copy_(mean_group)

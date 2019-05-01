@@ -1,19 +1,33 @@
 import torch
 import logging.config
+from math import floor
 from copy import deepcopy
 from six import string_types
 from .regime import Regime
 from .param_filter import FilterParameters
 from . import regularization
 import torch.nn as nn
+from torch.optim.lr_scheduler import _LRScheduler
 
 _OPTIMIZERS = {name: func for name, func in torch.optim.__dict__.items()}
+_LRSCHEDULERS = {name: func for name,
+                 func in torch.optim.lr_scheduler.__dict__.items()}
 
 try:
     from adabound import AdaBound
     _OPTIMIZERS['AdaBound'] = AdaBound
 except ImportError:
     pass
+
+
+class _EmptySchedule(torch.optim.lr_scheduler._LRScheduler):
+    def __init__(self, optimizer, last_epoch=-1):
+        super(_EmptySchedule, self).__init__(optimizer, last_epoch=-1)
+        self.last_epoch = 0
+
+    def step(self, epoch=None):
+        if epoch is None:
+            epoch = self.last_epoch + 1
 
 
 def copy_params(param_target, param_src):
@@ -83,7 +97,7 @@ class OptimRegime(Regime):
          }]"
     """
 
-    def __init__(self, model, regime, defaults={}, filter=None, use_float_copy=False):
+    def __init__(self, model, regime, defaults={}, filter=None, use_float_copy=False, log=True):
         super(OptimRegime, self).__init__(regime, defaults)
         if filter is not None:
             model = FilterParameters(model, **filter)
@@ -95,15 +109,35 @@ class OptimRegime(Regime):
         self.optimizer = torch.optim.SGD(self.parameters, lr=0)
         self.regularizer = regularization.Regularizer(model)
         self.use_float_copy = use_float_copy
+        self.lr_scheduler = _EmptySchedule(self.optimizer, last_epoch=-1)
+        self.schedule_time_frame = 'epoch'
+        self.log = log
 
-    def update(self, epoch=None, train_steps=None):
+    def update(self, epoch=None, train_steps=None, metrics=None):
         """adjusts optimizer according to current epoch or steps and training regime.
         """
+        updated = False
         if super(OptimRegime, self).update(epoch, train_steps):
             self.adjust(self.setting)
-            return True
+            updated = True
+        if self.schedule_time_frame == 'epoch':
+            time = int(floor(epoch)) + 1
+        elif self.schedule_time_frame == 'step':
+            time = train_steps + 1
         else:
-            return False
+            raise ValueError
+
+        if time != self.lr_scheduler.last_epoch:
+            prev_lr = self.get_lr()[0]
+            if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                self.lr_scheduler.step(metrics, epoch=time)
+            self.lr_scheduler.step(epoch=time)
+            updated = True
+            if prev_lr != self.get_lr()[0] and self.log:
+                logging.debug('OPTIMIZER - lr scheduled = %s'
+                              % self.get_lr()[0])
+
+        return updated
 
     def adjust(self, setting):
         """adjusts optimizer according to a setting dict.
@@ -114,23 +148,31 @@ class OptimRegime(Regime):
             optim_method = _OPTIMIZERS[setting.get('optimizer', 'SGD')]
             if reset:  # reset the optimizer cache:
                 self.optimizer = torch.optim.SGD(self.parameters, lr=0)
-                logging.debug('OPTIMIZER - reset setting')
+                if self.log:
+                    logging.debug('OPTIMIZER - reset setting')
             if not isinstance(self.optimizer, optim_method):
                 self.optimizer = optim_method(self.optimizer.param_groups)
-                logging.debug('OPTIMIZER - setting method = %s' %
-                              setting['optimizer'])
+                if self.log:
+                    logging.debug('OPTIMIZER - setting method = %s' %
+                                  setting['optimizer'])
         for param_group in self.optimizer.param_groups:
             for key in param_group.keys():
                 if key in setting:
                     new_val = setting[key]
                     if new_val != param_group[key]:
-                        logging.debug('OPTIMIZER - setting %s = %s' %
-                                      (key, setting[key]))
+                        if self.log:
+                            logging.debug('OPTIMIZER - setting %s = %s' %
+                                          (key, setting[key]))
                         param_group[key] = setting[key]
-                        # fix for AdaBound
-                        if key == 'lr' and hasattr(self.optimizer, 'base_lrs'):
-                            self.optimizer.base_lrs = list(
-                                map(lambda group: group['lr'], self.optimizer.param_groups))
+                        if key == 'lr':
+                            param_group['initial_lr'] = param_group['lr']
+                            base_lrs = list(map(lambda group: group['lr'],
+                                                self.optimizer.param_groups))
+                            self.lr_scheduler.base_lrs = base_lrs
+
+                            # fix for AdaBound
+                            if hasattr(self.optimizer, 'base_lrs'):
+                                self.optimizer.base_lrs = base_lrs
 
         if 'regularizer' in setting:
             reg_list = deepcopy(setting['regularizer'])
@@ -147,6 +189,23 @@ class OptimRegime(Regime):
                     regularizers.append(reg(self.regularizer._model))
             self.regularizer = regularization.RegularizerList(self.regularizer._model,
                                                               regularizers)
+
+        if 'lr_scheduler' in setting:
+            schedule_config = setting['lr_scheduler']
+            if isinstance(schedule_config, _LRScheduler):
+                self.lr_scheduler = schedule_config
+            elif isinstance(schedule_config, dict):
+                name = schedule_config.pop('name')
+                self.schedule_time_frame = schedule_config.pop('time_frame',
+                                                               'epoch')
+                schedule_config['last_epoch'] = self.lr_scheduler.last_epoch
+                self.lr_scheduler = _LRSCHEDULERS[name](self.optimizer,
+                                                        **schedule_config)
+            elif schedule_config is None:
+                self.lr_scheduler = _EmptySchedule(self.optimizer,
+                                                   last_epoch=self.lr_scheduler.last_epoch)
+            else:  # invalid config
+                raise NotImplementedError
 
     def __getstate__(self):
         return {
@@ -187,18 +246,15 @@ class OptimRegime(Regime):
                 if p.grad is not None:
                     p.grad.detach().zero_()
 
-    def step(self, closure=None):
+    def step(self):
         """Performs a single optimization step (parameter update).
-
-        Arguments:
-            closure (callable): A closure that reevaluates the model and
-                returns the loss. Optional for most optimizers.
         """
         if self.use_float_copy:
             copy_params_grad(self.parameters, self._original_parameters)
         self.regularizer.pre_step()
-        self.optimizer.step(closure)
+        self.optimizer.step()
         self.regularizer.post_step()
+
         if self.use_float_copy:
             copy_params(self._original_parameters, self.parameters)
 
@@ -212,14 +268,21 @@ class OptimRegime(Regime):
         """
         self.regularizer.pre_backward()
 
+    def get_value(self, key):
+        return [group[key] for group in self.optimizer.param_groups]
+
+    def get_lr(self):
+        return self.get_value('lr')
+
 
 class MultiOptimRegime(OptimRegime):
 
-    def __init__(self, *optim_regime_list):
+    def __init__(self, *optim_regime_list, log=True):
         self.optim_regime_list = []
         for optim_regime in optim_regime_list:
             assert isinstance(optim_regime, OptimRegime)
             self.optim_regime_list.append(optim_regime)
+        self.log = log
 
     def update(self, epoch=None, train_steps=None):
         """adjusts optimizer according to current epoch or steps and training regime.
@@ -227,7 +290,7 @@ class MultiOptimRegime(OptimRegime):
         updated = False
         for i, optim in enumerate(self.optim_regime_list):
             current_updated = optim.update(epoch, train_steps)
-            if current_updated:
+            if current_updated and self.log:
                 logging.debug('OPTIMIZER #%s was updated' % i)
             updated = updated or current_updated
         return updated
@@ -237,15 +300,11 @@ class MultiOptimRegime(OptimRegime):
         for optim in self.optim_regime_list:
             optim.zero_grad()
 
-    def step(self, closure=None):
+    def step(self):
         """Performs a single optimization step (parameter update).
-
-        Arguments:
-            closure (callable): A closure that reevaluates the model and
-                returns the loss. Optional for most optimizers.
         """
         for optim in self.optim_regime_list:
-            optim.step(closure)
+            optim.step()
 
     def pre_forward(self):
         for optim in self.optim_regime_list:
@@ -257,3 +316,10 @@ class MultiOptimRegime(OptimRegime):
 
     def __repr__(self):
         return str([str(optim) for optim in self.optim_regime_list])
+
+    def get_value(self, key):
+        return [[group[key] for group in optim.optimizer.param_groups]
+                for optim in self.optim_regime_list]
+
+    def get_lr(self):
+        return self.get_value('lr')

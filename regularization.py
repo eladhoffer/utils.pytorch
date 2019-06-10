@@ -149,9 +149,41 @@ class GradClip(Regularizer):
             with torch.no_grad():
                 grad = clip_grad_norm_(self.parameters(), self.value)
             if self.log:
-                logging.debug('Gradient value was clipped from %s to %s',
+                logging.debug('Gradient norm value was clipped from %s to %s',
                               grad, self.value)
 
+
+class GradSmooth(Regularizer):
+    def __init__(self,  model, value=True, momentum=0.9, filter={}, log=False):
+        super(GradSmooth, self).__init__(model,
+                                         value=value, filter=filter, log=log)
+        self.momentum = momentum
+        self.running_norm = None
+        self.enabled = value
+        self.counter = 0
+
+    def pre_step(self):
+        parameters = list(
+            filter(lambda p: p.grad is not None, self.parameters()))
+        total_norm = 0
+        for p in parameters:
+            param_norm = p.grad.data.norm(2)
+            total_norm += param_norm.item() ** 2
+        total_norm = total_norm ** 0.5
+        if self.running_norm is None:
+            self.running_norm = total_norm
+        else:
+            self.running_norm = self.momentum * self.running_norm \
+                + (1-self.momentum) * total_norm
+            if self.enabled:
+                clip_coef = self.running_norm / (total_norm + 1e-6)
+                for p in parameters:
+                    p.grad.data.mul_(clip_coef)
+            if self.log:
+                logging.debug('Gradient norm value was clipped from %s to %s',
+                              total_norm, self.running_norm)
+
+        self.counter += 1
 
 class L1Regularization(Regularizer):
     def __init__(self, model, value=1e-3,

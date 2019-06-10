@@ -220,10 +220,7 @@ class OptimRegime(Regime):
     def state_dict(self):
         """Returns the state of the optimizer as a :class:`dict`.
         """
-        return {
-            'optimizer_state': self.optimizer.state_dict(),
-            'regime': self.regime,
-        }
+        return self.optimizer.state_dict()
 
     def load_state_dict(self, state_dict):
         """Loads the optimizer state.
@@ -233,10 +230,7 @@ class OptimRegime(Regime):
                 from a call to :meth:`state_dict`.
         """
         # deepcopy, to be consistent with module API
-        optimizer_state_dict = state_dict['optimizer_state']
-
-        self.__setstate__({'optimizer_state': optimizer_state_dict,
-                           'regime': state_dict['regime']})
+        self.optimizer.load_state_dict(state_dict)
 
     def zero_grad(self):
         """Clears the gradients of all optimized :class:`Variable` s."""

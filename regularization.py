@@ -41,7 +41,7 @@ def _norm(x, dim, p=2):
 
 
 class Regularizer(object):
-    def __init__(self, model, value=1e-3, filter={}, log=False):
+    def __init__(self, model, value=0, filter={}, log=False):
         self._model = model
         self._named_parameters = list(
             FilterParameters(model, **filter).named_parameters())
@@ -107,7 +107,7 @@ class RegularizerList(Regularizer):
 
 
 class L2Regularization(Regularizer):
-    def __init__(self, model, value=1e-3,
+    def __init__(self, model, value=0,
                  filter={'parameter_name': is_not_bias,
                          'module': is_not_bn},
                  pre_op=True, post_op=False, **kwargs):

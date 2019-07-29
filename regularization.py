@@ -1,6 +1,6 @@
 import torch
 from .param_filter import FilterParameters, is_not_bn, is_not_bias
-from .absorb_bn import search_absorbe_bn
+from .absorb_bn import search_absorb_bn
 from torch.nn.utils import clip_grad_norm_
 import logging
 
@@ -334,7 +334,7 @@ class AbsorbBN(Regularizer):
     def pre_forward(self):
         if self._removed:
             return
-        search_absorbe_bn(self._model, remove_bn=self.remove_bn, verbose=False)
+        search_absorb_bn(self._model, remove_bn=self.remove_bn, verbose=False)
         self._removed = self.remove_bn
 
 

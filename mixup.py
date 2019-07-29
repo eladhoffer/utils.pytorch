@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 from numpy.random import beta
 from .misc import onehot
 
@@ -51,3 +52,43 @@ class MixUp(nn.Module):
         idx = self.mix_index.to(device=x.device)
         x_mix = x.index_select(self.batch_dim, idx)
         return self.mix(x, x_mix)
+
+
+def rand_bbox(size, lam):
+    W = size[2]
+    H = size[3]
+    cut_rat = np.sqrt(1. - lam)
+    cut_w = np.int(W * cut_rat)
+    cut_h = np.int(H * cut_rat)
+
+    # uniform
+    cx = np.random.randint(W)
+    cy = np.random.randint(H)
+
+    bbx1 = np.clip(cx - cut_w // 2, 0, W)
+    bby1 = np.clip(cy - cut_h // 2, 0, H)
+    bbx2 = np.clip(cx + cut_w // 2, 0, W)
+    bby2 = np.clip(cy + cut_h // 2, 0, H)
+
+    return bbx1, bby1, bbx2, bby2
+
+class CutMix(MixUp):
+    def __init__(self, batch_dim=0):
+        super(CutMix, self).__init__(batch_dim)
+
+    def mix_image(self, x1, x2):
+        assert not torch.is_tensor(self.mix_values) or \
+            self.mix_values.nelement() == 1
+        lam = float(self.mix_values)
+        bbx1, bby1, bbx2, bby2 = rand_bbox(x1.size(), lam)
+        x1[:, :, bbx1:bbx2, bby1:bby2] = x2[:, :, bbx1:bbx2, bby1:bby2]
+        return x1
+
+    def forward(self, x):
+        if not self.training or \
+            self.mix_values is None or\
+                self.mix_values is None:
+            return x
+        idx = self.mix_index.to(device=x.device)
+        x_mix = x.index_select(self.batch_dim, idx)
+        return self.mix_image(x, x_mix)

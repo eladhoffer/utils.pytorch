@@ -54,10 +54,10 @@ def is_absorbing(m):
     return isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear)
 
 
-def search_absorbe_bn(model, prev=None, remove_bn=True, verbose=False):
+def search_absorb_bn(model, prev=None, remove_bn=True, verbose=False):
     with torch.no_grad():
         for m in model.children():
             if is_bn(m) and is_absorbing(prev):
                 absorb_bn(prev, m, remove_bn=remove_bn, verbose=verbose)
-            search_absorbe_bn(m, remove_bn=remove_bn, verbose=verbose)
+            search_absorb_bn(m, remove_bn=remove_bn, verbose=verbose)
             prev = m

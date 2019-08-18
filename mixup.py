@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from numpy.random import beta
-from .misc import onehot
+from torch.nn.functional import one_hot
 
 
 class MixUp(nn.Module):
@@ -39,7 +39,7 @@ class MixUp(nn.Module):
             self.mix_values is None or\
                 self.mix_values is None:
             return y
-        y = onehot(y, n_class).to(dtype=torch.float)
+        y = one_hot(y, n_class).to(dtype=torch.float)
         idx = self.mix_index.to(device=y.device)
         y_mix = y.index_select(self.batch_dim, idx)
         return self.mix(y, y_mix)
@@ -72,6 +72,7 @@ def rand_bbox(size, lam):
 
     return bbx1, bby1, bbx2, bby2
 
+
 class CutMix(MixUp):
     def __init__(self, batch_dim=0):
         super(CutMix, self).__init__(batch_dim)
@@ -82,7 +83,14 @@ class CutMix(MixUp):
         lam = float(self.mix_values)
         bbx1, bby1, bbx2, bby2 = rand_bbox(x1.size(), lam)
         x1[:, :, bbx1:bbx2, bby1:bby2] = x2[:, :, bbx1:bbx2, bby1:bby2]
+        lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) /
+                   (x1.size()[-1] * x1.size()[-2]))
+        self.mix_values.fill_(lam)
         return x1
+
+    def sample(self, alpha, batch_size, sample_batch=False):
+        assert not sample_batch
+        super(CutMix, self).sample(alpha, batch_size, sample_batch)
 
     def forward(self, x):
         if not self.training or \

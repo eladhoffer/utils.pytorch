@@ -84,4 +84,4 @@ class Regime(object):
             return True
 
     def __repr__(self):
-        return str(self.regime)
+        return 'Current: %s\n Regime:%s' % (self.setting, self.regime)

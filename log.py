@@ -37,10 +37,8 @@ def setup_logging(log_file='log.txt', resume=False, dummy=False):
     if dummy:
         logging.getLogger('dummy')
         return
-    if os.path.isfile(log_file) and resume:
-        file_mode = 'a'
-    else:
-        file_mode = 'w'
+
+    file_mode = 'a' if os.path.isfile(log_file) and resume else 'w'
 
     root_logger = logging.getLogger()
     if root_logger.handlers:

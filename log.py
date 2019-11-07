@@ -41,18 +41,22 @@ def setup_logging(log_file='log.txt', resume=False, dummy=False):
     file_mode = 'a' if os.path.isfile(log_file) and resume else 'w'
 
     root_logger = logging.getLogger()
-    if root_logger.handlers:
-        root_logger.removeHandler(root_logger.handlers[0])
     logging.basicConfig(level=logging.DEBUG,
                         format="%(asctime)s - %(levelname)s - %(message)s",
-                        datefmt="%Y-%m-%d %H:%M:%S",
-                        filename=log_file,
-                        filemode=file_mode)
+                        datefmt="%Y-%m-%d %H:%M:%S")
+    # Remove all existing handlers (can't use the `force` option with
+    # python < 3.8)
+    for hdlr in root_logger.handlers[:]:
+        root_logger.removeHandler(hdlr)
+    # Add the handlers we want to use
+    fileout = logging.FileHandler(log_file, mode=file_mode)
+    fileout.setLevel(logging.DEBUG)
+    fileout.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    logging.getLogger().addHandler(fileout)
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(message)s')
-    console.setFormatter(formatter)
-    logging.getLogger('').addHandler(console)
+    console.setFormatter(logging.Formatter('%(message)s'))
+    logging.getLogger().addHandler(console)
 
 
 def plot_figure(data, x, y, title=None, xlabel=None, ylabel=None, legend=None,

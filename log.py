@@ -36,25 +36,25 @@ def setup_logging(log_file='log.txt', resume=False, dummy=False):
     """
     if dummy:
         logging.getLogger('dummy')
+        return
+    if os.path.isfile(log_file) and resume:
+        file_mode = 'a'
     else:
-        if os.path.isfile(log_file) and resume:
-            file_mode = 'a'
-        else:
-            file_mode = 'w'
+        file_mode = 'w'
 
-        root_logger = logging.getLogger()
-        if root_logger.handlers:
-            root_logger.removeHandler(root_logger.handlers[0])
-        logging.basicConfig(level=logging.DEBUG,
-                            format="%(asctime)s - %(levelname)s - %(message)s",
-                            datefmt="%Y-%m-%d %H:%M:%S",
-                            filename=log_file,
-                            filemode=file_mode)
-        console = logging.StreamHandler()
-        console.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(message)s')
-        console.setFormatter(formatter)
-        logging.getLogger('').addHandler(console)
+    root_logger = logging.getLogger()
+    if root_logger.handlers:
+        root_logger.removeHandler(root_logger.handlers[0])
+    logging.basicConfig(level=logging.DEBUG,
+                        format="%(asctime)s - %(levelname)s - %(message)s",
+                        datefmt="%Y-%m-%d %H:%M:%S",
+                        filename=log_file,
+                        filemode=file_mode)
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(message)s')
+    console.setFormatter(formatter)
+    logging.getLogger('').addHandler(console)
 
 
 def plot_figure(data, x, y, title=None, xlabel=None, ylabel=None, legend=None,

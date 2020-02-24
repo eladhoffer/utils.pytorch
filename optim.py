@@ -23,7 +23,6 @@ except ImportError:
 def cosine_anneal_lr(lr0, lrT, T, t0=0):
     return f"lambda t: {{'lr': {lrT} + {(lr0 - lrT)} * (1 + math.cos(math.pi * (t - {t0}) / {T-t0})) / 2}}"
 
-
 def linear_scale_lr(lr0, lrT, T, t0=0):
     rate = (lrT - lr0) / T
     return f"lambda t: {{'lr': max({lr0} + (t - {t0}) * {rate}, 0)}}"

@@ -1,5 +1,6 @@
 import torch
 import logging.config
+import math
 from math import floor
 from copy import deepcopy
 from six import string_types
@@ -19,6 +20,13 @@ try:
 except ImportError:
     pass
 
+def cosine_anneal_lr(lr0, lrT, T, t0=0):
+    return f"lambda t: {{'lr': {lrT} + {(lr0 - lrT)} * (1 + math.cos(math.pi * (t - {t0}) / {T})) / 2}}"
+
+
+def linear_scale_lr(lr0, lrT, T, t0=0):
+    rate = (lrT - lr0) / T
+    return f"lambda t: {{'lr': max({lr0} + (t - {t0}) * {rate}, 0)}}"
 
 class _EmptySchedule(torch.optim.lr_scheduler._LRScheduler):
     def __init__(self, optimizer, last_epoch=-1):

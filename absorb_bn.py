@@ -14,6 +14,7 @@ def init_bn_params(bn_module):
     bn_module.running_mean.fill_(0)
     bn_module.running_var.fill_(1)
 
+
 def absorb_bn(module, bn_module, remove_bn=True, verbose=False):
     with torch.no_grad():
         w = module.weight
@@ -56,8 +57,10 @@ def is_absorbing(m):
 
 def search_absorb_bn(model, prev=None, remove_bn=True, verbose=False):
     with torch.no_grad():
-        for m in model.children():
+        for n, m in model.named_children():
             if is_bn(m) and is_absorbing(prev):
                 absorb_bn(prev, m, remove_bn=remove_bn, verbose=verbose)
+                if remove_bn:
+                    setattr(model, n, nn.Identity())
             search_absorb_bn(m, remove_bn=remove_bn, verbose=verbose)
             prev = m

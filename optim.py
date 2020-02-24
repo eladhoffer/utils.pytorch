@@ -21,7 +21,7 @@ except ImportError:
     pass
 
 def cosine_anneal_lr(lr0, lrT, T, t0=0):
-    return f"lambda t: {{'lr': {lrT} + {(lr0 - lrT)} * (1 + math.cos(math.pi * (t - {t0}) / {T})) / 2}}"
+    return f"lambda t: {{'lr': {lrT} + {(lr0 - lrT)} * (1 + math.cos(math.pi * (t - {t0}) / {T-t0})) / 2}}"
 
 
 def linear_scale_lr(lr0, lrT, T, t0=0):

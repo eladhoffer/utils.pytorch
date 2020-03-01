@@ -7,7 +7,7 @@ def is_not_bias(name):
 
 
 def is_bn(module):
-    return isinstance(module, nn.BatchNorm1d) or isinstance(module, nn.BatchNorm2d) or isinstance(module, nn.BatchNorm3d)
+    return isinstance(module, nn.modules.batchnorm._BatchNorm)
 
 
 def is_not_bn(module):

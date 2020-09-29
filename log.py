@@ -90,7 +90,7 @@ def plot_figure(data, x, y, title=None, xlabel=None, ylabel=None, legend=None,
     for i, yi in enumerate(y):
         f.line(data[x], data[yi],
                line_width=line_width,
-               line_color=next(colors), legend=legend[i])
+               line_color=next(colors), legend_label=legend[i])
     f.legend.click_policy = "hide"
     return f
 

@@ -30,8 +30,16 @@ class Regime(object):
 
     def __init__(self, regime, defaults={}):
         self.regime = regime
+        self.defaults = defaults
+        self.reset(regime, defaults)
+
+    def reset(self, regime=None, defaults=None):
+        if regime is not None:
+            self.regime = regime
+        if defaults is not None:
+            self.defaults = defaults
         self.current_regime_phase = None
-        self.setting = defaults
+        self.setting = self.defaults
 
     def update(self, epoch=None, train_steps=None):
         """adjusts according to current epoch or steps and regime.

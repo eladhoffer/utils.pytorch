@@ -40,6 +40,14 @@ def _norm(x, dim, p=2):
         return _norm(x.transpose(0, dim), 0).transpose(0, dim)
 
 
+def _param_grad_norm(parameters):
+    total_norm = 0
+    for p in parameters:
+        param_norm = p.grad.data.norm(2)
+        total_norm += param_norm.item() ** 2
+    return total_norm ** 0.5
+
+
 class Regularizer(object):
     def __init__(self, model, value=0, filter={}, log=False):
         self._model = model
@@ -120,7 +128,7 @@ class L2Regularization(Regularizer):
         if self.pre_op:
             with torch.no_grad():
                 for _, p in self._named_parameters:
-                    p.grad.add_(self.value, p)
+                    p.grad.add_(p, alpha=self.value)
             if self.log:
                 logging.debug('L2 penalty of %s was applied pre optimization step',
                               self.value)
@@ -129,7 +137,7 @@ class L2Regularization(Regularizer):
         if self.post_op:
             with torch.no_grad():
                 for _, p in self._named_parameters:
-                    p.add_(-self.value, p)
+                    p.add_(p, alpha=-self.value)
             if self.log:
                 logging.debug('L2 penalty of %s was applied post optimization step',
                               self.value)
@@ -153,6 +161,40 @@ class GradClip(Regularizer):
                               grad, self.value)
 
 
+class AngleNoise(Regularizer):
+    def __init__(self, *kargs, **kwargs):
+        super(AngleNoise, self).__init__(*kargs, **kwargs)
+
+    def pre_step(self):
+        if self.value > 0:
+            with torch.no_grad():
+                parameters = list(
+                    filter(lambda p: p.grad is not None, self.parameters()))
+                total_norm = _param_grad_norm(parameters)
+                std = self.value
+                for p in parameters:
+                    grad = p.grad
+                    grad.div_(total_norm)
+                    noise = torch.empty_like(grad).normal_(std=std)
+                    grad.add_(noise)
+                new_norm = _param_grad_norm(parameters)
+                scale = total_norm / new_norm
+                for p in parameters:
+                    p.grad.mul_(scale)
+                # num_params = sum([p.numel() for p in parameters])
+                # std = self.value
+                # noise_norm = std * (num_params ** 0.5)
+                # for p in parameters:
+                #     grad = p.grad
+                #     grad.div_(total_norm + noise_norm)
+                #     noise = torch.empty_like(grad).normal_(std=std)
+                #     grad.add_(noise).mul_(total_norm)
+
+            if self.log:
+                logging.debug('Gradient angle was added noise with std value %s',
+                              self.value)
+
+
 class GradSmooth(Regularizer):
     def __init__(self,  model, value=True, momentum=0.9, filter={}, log=False):
         super(GradSmooth, self).__init__(model,
@@ -165,11 +207,7 @@ class GradSmooth(Regularizer):
     def pre_step(self):
         parameters = list(
             filter(lambda p: p.grad is not None, self.parameters()))
-        total_norm = 0
-        for p in parameters:
-            param_norm = p.grad.data.norm(2)
-            total_norm += param_norm.item() ** 2
-        total_norm = total_norm ** 0.5
+        total_norm = _param_grad_norm(parameters)
         if self.running_norm is None:
             self.running_norm = total_norm
         else:
@@ -184,6 +222,7 @@ class GradSmooth(Regularizer):
                               total_norm, self.running_norm)
 
         self.counter += 1
+
 
 class L1Regularization(Regularizer):
     def __init__(self, model, value=1e-3,
@@ -200,7 +239,7 @@ class L1Regularization(Regularizer):
         if self.pre_op:
             with torch.no_grad():
                 for n, p in self._named_parameters:
-                    p.grad.add_(self.value, p.sign())
+                    p.grad.add_(p.sign(), alpha=self.value)
                     if self.report_sparsity:
                         logging.debug('Sparsity for %s is %s', n, sparsity(p))
             if self.log:
@@ -274,7 +313,7 @@ class LARS(Regularizer):
     def pre_step(self):
         with torch.no_grad():
             for _, param in self._named_parameters:
-                param.grad.add_(self.weight_decay, param)
+                param.grad.add_(param, alpha=self.weight_decay)
                 if self.dim is not None:
                     norm = _norm(param, dim=self.dim, p=self.p)
                     grad_norm = _norm(param.grad, dim=self.dim, p=self.p)
@@ -368,7 +407,7 @@ class Consolidate(Regularizer):
             for i, group in enumerate(self.groups):
                 mean_group = sum(group) / len(group)
                 for p in group:
-                    p.grad.data.add_(self.value, p - mean_group)
+                    p.grad.data.add_(p - mean_group, alpha=self.value)
                 if self.log:
                     logging.debug('group %s, diff norm = %s' %
                                   (i, float(sum([(p - mean_group).norm() ** 2 for p in group]).sqrt())))

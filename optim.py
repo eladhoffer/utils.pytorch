@@ -83,7 +83,7 @@ class ModuleFloatShadow(nn.Module):
         return self.original_module.named_modules(*kargs, **kwargs)
 
 
-class OptimRegime(Regime):
+class OptimRegime(Regime, torch.optim.Optimizer):
     """
     Reconfigures the optimizer according to setting list.
     Exposes optimizer methods - state, step, zero_grad, add_param_group
@@ -137,8 +137,8 @@ class OptimRegime(Regime):
         if time != self.lr_scheduler.last_epoch:
             prev_lr = self.get_lr()[0]
             if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                self.lr_scheduler.step(metrics, epoch=time)
-            self.lr_scheduler.step(epoch=time)
+                self.lr_scheduler.step(metrics)
+            self.lr_scheduler.step()
             updated = True
             if prev_lr != self.get_lr()[0] and self.log:
                 logging.debug('OPTIMIZER - lr scheduled = %s'
@@ -247,13 +247,13 @@ class OptimRegime(Regime):
                 if p.grad is not None:
                     p.grad.detach().zero_()
 
-    def step(self):
+    def step(self, *args, **kwargs):
         """Performs a single optimization step (parameter update).
         """
         if self.use_float_copy:
             copy_params_grad(self.parameters, self._original_parameters)
         self.regularizer.pre_step()
-        self.optimizer.step()
+        self.optimizer.step(*args, **kwargs)
         self.regularizer.post_step()
 
         if self.use_float_copy:

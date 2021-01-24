@@ -20,12 +20,15 @@ try:
 except ImportError:
     pass
 
+
 def cosine_anneal_lr(lr0, lrT, T, t0=0):
     return f"lambda t: {{'lr': {lrT} + {(lr0 - lrT)} * (1 + math.cos(math.pi * (t - {t0}) / {T-t0})) / 2}}"
+
 
 def linear_scale_lr(lr0, lrT, T, t0=0):
     rate = (lrT - lr0) / T
     return f"lambda t: {{'lr': max({lr0} + (t - {t0}) * {rate}, 0)}}"
+
 
 class _EmptySchedule(torch.optim.lr_scheduler._LRScheduler):
     def __init__(self, optimizer, last_epoch=-1):
@@ -134,7 +137,8 @@ class OptimRegime(Regime, torch.optim.Optimizer):
         else:
             raise ValueError
 
-        if time != self.lr_scheduler.last_epoch:
+        if (time != self.lr_scheduler.last_epoch) & \
+                getattr(self.optimizer, '_step_count', 0) > 0:
             prev_lr = self.get_lr()[0]
             if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                 self.lr_scheduler.step(metrics)
@@ -274,6 +278,10 @@ class OptimRegime(Regime, torch.optim.Optimizer):
 
     def get_lr(self):
         return self.get_value('lr')
+
+    @property
+    def state(self):
+        return self.optimizer.state
 
 
 class MultiOptimRegime(OptimRegime):

@@ -27,7 +27,28 @@ class RandomSamplerReplacment(torch.utils.data.sampler.Sampler):
     def __len__(self):
         return self.num_samples
 
+class LongestLoader(torch.utils.data.dataloader.DataLoader):
+    def __init__(self, *loaders):
+        self.loaders = loaders
+        self.num_workers = self.loaders[0].num_workers
 
+    def __iter__(self):
+        self.iterators = [iter(it) for it in self.loaders]
+        max_length = len(self)
+        for _ in range(max_length):
+            values = []
+            for i, it in enumerate(self.iterators):
+                try:
+                    value = next(it)
+                except StopIteration:
+                    self.iterators[i] = iter(self.loaders[i])
+                    value = next(self.iterators[i])
+                values.append(value)
+            yield tuple(values)
+
+    def __len__(self):
+        return max([len(arg) for arg in self.loaders])
+        
 class LimitDataset(Dataset):
 
     def __init__(self, dset, max_len):

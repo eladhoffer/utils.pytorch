@@ -73,7 +73,7 @@ class CutMix(MixUp):
         x1[:, :, bbx1:bbx2, bby1:bby2] = x2[:, :, bbx1:bbx2, bby1:bby2]
         lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) /
                    (x1.size()[-1] * x1.size()[-2]))
-        self.mix_value.fill_(lam)
+        self.mix_value = lam
         return x1
 
     def sample(self, batch_size, alpha=None):
@@ -81,7 +81,6 @@ class CutMix(MixUp):
 
     def forward(self, x):
         if not self.training or \
-            self.mix_value is None or\
                 self.mix_value is None:
             return x
         idx = self.mix_index.to(device=x.device)

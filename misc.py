@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint, checkpoint_sequential
+from contextlib import contextmanager
 
 torch_dtypes = {
     'float': torch.float,
@@ -37,6 +38,21 @@ def onehot(indexes, N=None, ignore_index=None):
     if ignore_index is not None and ignore_index >= 0:
         output.masked_fill_(indexes.eq(ignore_index).unsqueeze(-1), 0)
     return output
+
+
+@contextmanager
+def no_bn_update(model):
+    prev_momentum = {}
+    for name, module in model.named_modules():
+        if isinstance(module, nn.BatchNorm2d):
+            prev_momentum[name] = module.momentum
+            module.momentum = 0
+    try:
+        yield model
+    finally:
+        for name, module in model.named_modules():
+            if isinstance(module, nn.BatchNorm2d):
+                module.momentum = prev_momentum[name]
 
 
 def set_global_seeds(i):

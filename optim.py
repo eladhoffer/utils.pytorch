@@ -251,17 +251,23 @@ class OptimRegime(Regime, torch.optim.Optimizer):
                 if p.grad is not None:
                     p.grad.detach().zero_()
 
-    def step(self, *args, **kwargs):
-        """Performs a single optimization step (parameter update).
-        """
+    def pre_step(self):
         if self.use_float_copy:
             copy_params_grad(self.parameters, self._original_parameters)
         self.regularizer.pre_step()
-        self.optimizer.step(*args, **kwargs)
+
+    def post_step(self):
         self.regularizer.post_step()
 
         if self.use_float_copy:
             copy_params(self._original_parameters, self.parameters)
+
+    def step(self, *args, **kwargs):
+        """Performs a single optimization step (parameter update).
+        """
+        self.pre_step()
+        self.optimizer.step(*args, **kwargs)
+        self.post_step()
 
     def pre_forward(self):
         """ allows modification pre-forward pass - e.g for regularization

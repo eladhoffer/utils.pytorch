@@ -9,17 +9,6 @@ def sparsity(p):
     return float(p.eq(0).sum()) / p.nelement()
 
 
-def _norm_exclude_dim(x, dim=0, keepdim=False):
-    dims = tuple(set(range(x.dim())) - set([dim]))
-    return x.pow(2).sum(dims, keepdim=keepdim).sqrt()
-
-
-def _renorm(x, dim=0, inplace=False, eps=1e-12):
-    if not inplace:
-        x = x.clone()
-    return x.div_(_norm_exclude_dim(x, dim, keepdim=True))
-
-
 def _norm(x, dim, p=2):
     """Computes the norm over all dimensions except dim"""
     if p == -1:
@@ -85,6 +74,10 @@ class Regularizer(object):
     def pre_backward(self):
         pass
 
+    def params_with_grads(self, avoid_none_grads=False):
+        return [(p, p.grad) for p in self.parameters()
+                if (not avoid_none_grads or p.grad is not None)]
+
 
 class RegularizerList(Regularizer):
     def __init__(self, model, regularization_list):
@@ -127,8 +120,8 @@ class L2Regularization(Regularizer):
     def pre_step(self):
         if self.pre_op:
             with torch.no_grad():
-                for _, p in self._named_parameters:
-                    p.grad.add_(p, alpha=self.value)
+                params, grads = zip(*self.params_with_grads())
+                torch._foreach_add_(grads, params, alpha=self.value)
             if self.log:
                 logging.debug('L2 penalty of %s was applied pre optimization step',
                               self.value)
@@ -136,8 +129,7 @@ class L2Regularization(Regularizer):
     def post_step(self):
         if self.post_op:
             with torch.no_grad():
-                for _, p in self._named_parameters:
-                    p.add_(p, alpha=-self.value)
+                torch._foreach_mul_(list(self.parameters()), 1. - self.value)
             if self.log:
                 logging.debug('L2 penalty of %s was applied post optimization step',
                               self.value)
@@ -161,42 +153,8 @@ class GradClip(Regularizer):
                               grad, self.value)
 
 
-class AngleNoise(Regularizer):
-    def __init__(self, *kargs, **kwargs):
-        super(AngleNoise, self).__init__(*kargs, **kwargs)
-
-    def pre_step(self):
-        if self.value > 0:
-            with torch.no_grad():
-                parameters = list(
-                    filter(lambda p: p.grad is not None, self.parameters()))
-                total_norm = _param_grad_norm(parameters)
-                std = self.value
-                for p in parameters:
-                    grad = p.grad
-                    grad.div_(total_norm)
-                    noise = torch.empty_like(grad).normal_(std=std)
-                    grad.add_(noise)
-                new_norm = _param_grad_norm(parameters)
-                scale = total_norm / new_norm
-                for p in parameters:
-                    p.grad.mul_(scale)
-                # num_params = sum([p.numel() for p in parameters])
-                # std = self.value
-                # noise_norm = std * (num_params ** 0.5)
-                # for p in parameters:
-                #     grad = p.grad
-                #     grad.div_(total_norm + noise_norm)
-                #     noise = torch.empty_like(grad).normal_(std=std)
-                #     grad.add_(noise).mul_(total_norm)
-
-            if self.log:
-                logging.debug('Gradient angle was added noise with std value %s',
-                              self.value)
-
-
 class GradSmooth(Regularizer):
-    def __init__(self,  model, value=True, momentum=0.9, filter={}, log=False):
+    def __init__(self, model, value=True, momentum=0.9, filter={}, log=False):
         super(GradSmooth, self).__init__(model,
                                          value=value, filter=filter, log=log)
         self.momentum = momentum
@@ -211,8 +169,8 @@ class GradSmooth(Regularizer):
         if self.running_norm is None:
             self.running_norm = total_norm
         else:
-            self.running_norm = self.momentum * self.running_norm \
-                + (1-self.momentum) * total_norm
+            self.running_norm = self.momentum * self.running_norm
+            + (1 - self.momentum) * total_norm
             if self.enabled:
                 clip_coef = self.running_norm / (total_norm + 1e-6)
                 for p in parameters:
@@ -320,7 +278,7 @@ class LARS(Regularizer):
                 else:
                     norm = param.norm(p=self.p)
                     grad_norm = param.grad.norm(p=self.p)
-                scale = self.value * norm/grad_norm
+                scale = self.value * norm / grad_norm
                 if self.min_scale is not None or self.max_scale is not None:
                     scale.clamp_(min=self.min_scale, max=self.max_scale)
                 param.grad.mul_(scale)

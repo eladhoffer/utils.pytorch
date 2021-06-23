@@ -19,10 +19,12 @@ class MixUp(nn.Module):
     def mix(self, x1, x2):
         return x2.lerp(x1, self.mix_value)
 
-    def sample(self, batch_size, alpha=None):
+    def sample(self, batch_size, alpha=None, even=False):
         alpha = self.alpha if alpha is None else alpha
         self.mix_index = torch.randperm(batch_size)
         self.mix_value = beta(alpha, alpha)
+        if not even:
+            self.mix_value = max(self.mix_value, 1 - self.mix_value)
 
     def mix_target(self, y, n_class):
         if not self.training or \

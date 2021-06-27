@@ -133,11 +133,10 @@ class OptimRegime(Regime, torch.optim.Optimizer):
         if self.schedule_time_frame == 'epoch':
             time = int(floor(epoch)) + 1
         elif self.schedule_time_frame == 'step':
-            time = train_steps + 1
+            time = train_steps
         else:
             raise ValueError
-
-        if (time != self.lr_scheduler.last_epoch) & \
+        if (time != self.lr_scheduler.last_epoch) and \
                 getattr(self.optimizer, '_step_count', 0) > 0:
             prev_lr = self.get_lr()[0]
             if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
@@ -147,7 +146,6 @@ class OptimRegime(Regime, torch.optim.Optimizer):
             if prev_lr != self.get_lr()[0] and self.log:
                 logging.debug('OPTIMIZER - lr scheduled = %s'
                               % self.get_lr()[0])
-
         return updated
 
     def adjust(self, setting):

@@ -1,5 +1,18 @@
 import torch
 import torch.nn as nn
+import re
+
+
+def _search_pattern_fn(pattern):
+    def _search(name):
+        return re.search(pattern, name) is not None
+    return _search
+
+
+def _search_type_pattern_fn(pattern):
+    def _search(var):
+        return re.search(pattern, type(var).__name__) is not None
+    return _search
 
 
 def is_not_bias(name):
@@ -33,6 +46,12 @@ def filtered_parameter_info(model, module_fn=None, module_name_fn=None, paramete
 
 class FilterParameters(object):
     def __init__(self, source, module=None, module_name=None, parameter_name=None):
+        if isinstance(module_name, str):
+            module_name = _search_pattern_fn(module_name)
+        if isinstance(parameter_name, str):
+            parameter_name = _search_pattern_fn(parameter_name)
+        if isinstance(module, str):
+            module = _search_type_pattern_fn(module)
         if isinstance(source, FilterParameters):
             self._filtered_parameter_info = list(source.filter(
                                                  module=module,
@@ -74,6 +93,7 @@ class FilterParameters(object):
 
 class FilterModules(FilterParameters):
     pass
+
 
 if __name__ == '__main__':
     from torchvision.models import resnet50

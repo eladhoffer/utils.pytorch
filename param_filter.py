@@ -27,6 +27,15 @@ def is_not_bn(module):
     return not is_bn(module)
 
 
+def _negate_fn(fn):
+    if fn is None:
+        return None
+    else:
+        def _negate(*kargs, **kwargs):
+            return not fn(*kargs, **kwargs)
+        return _negate
+
+
 def filtered_parameter_info(model, module_fn=None, module_name_fn=None, parameter_name_fn=None, memo=None):
     if memo is None:
         memo = set()
@@ -45,13 +54,17 @@ def filtered_parameter_info(model, module_fn=None, module_name_fn=None, paramete
 
 
 class FilterParameters(object):
-    def __init__(self, source, module=None, module_name=None, parameter_name=None):
+    def __init__(self, source, module=None, module_name=None, parameter_name=None, exclude=False):
         if isinstance(module_name, str):
             module_name = _search_pattern_fn(module_name)
         if isinstance(parameter_name, str):
             parameter_name = _search_pattern_fn(parameter_name)
         if isinstance(module, str):
             module = _search_type_pattern_fn(module)
+        if exclude:
+            module_name = _negate_fn(module_name)
+            parameter_name = _negate_fn(parameter_name)
+            module = _negate_fn(module)
         if isinstance(source, FilterParameters):
             self._filtered_parameter_info = list(source.filter(
                                                  module=module,

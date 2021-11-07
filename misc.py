@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint, checkpoint_sequential
 from contextlib import contextmanager
+from torch.nn.modules.batchnorm import _BatchNorm
 
 torch_dtypes = {
     'float': torch.float,
@@ -53,6 +54,26 @@ def no_bn_update(model):
         for name, module in model.named_modules():
             if isinstance(module, nn.BatchNorm2d):
                 module.momentum = prev_momentum[name]
+
+
+@contextmanager
+def calibrate_bn(model):
+    prev_attributes = {}
+    for name, module in model.named_modules():
+        if isinstance(module, _BatchNorm):
+            prev_attributes[name] = prev_attributes.get(name, {})
+            prev_attributes[name]['momentum'] = module.momentum
+            prev_attributes[name]['track_running_stats'] = module.track_running_stats
+            module.momentum = None
+            module.track_running_stats = True
+            module.reset_running_stats()
+    try:
+        yield model
+    finally:
+        for name, module in model.named_modules():
+            if isinstance(module, _BatchNorm):
+                module.momentum = prev_attributes[name]['momentum']
+                module.track_running_stats = prev_attributes[name]['track_running_stats']
 
 
 def set_global_seeds(i):

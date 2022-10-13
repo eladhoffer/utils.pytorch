@@ -64,9 +64,11 @@ def calibrate_bn(model):
             prev_attributes[name] = prev_attributes.get(name, {})
             prev_attributes[name]['momentum'] = module.momentum
             prev_attributes[name]['track_running_stats'] = module.track_running_stats
+            prev_attributes[name]['training'] = module.training
             module.momentum = None
             module.track_running_stats = True
             module.reset_running_stats()
+            module.train()
     try:
         yield model
     finally:
@@ -74,6 +76,8 @@ def calibrate_bn(model):
             if isinstance(module, _BatchNorm):
                 module.momentum = prev_attributes[name]['momentum']
                 module.track_running_stats = prev_attributes[name]['track_running_stats']
+                module.train(prev_attributes[name]['training'])
+                
 
 
 def set_global_seeds(i):
